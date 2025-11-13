@@ -17,9 +17,9 @@ contract BiuBiuPremium {
 
     // Subscription tier enum
     enum SubscriptionTier {
-        Daily,    // 1 day
-        Monthly,  // 30 days
-        Yearly    // 365 days
+        Daily, // 1 day
+        Monthly, // 30 days
+        Yearly // 365 days
     }
 
     // Tier pricing (immutable for gas optimization)
@@ -47,7 +47,11 @@ contract BiuBiuPremium {
         uint256 referralAmount
     );
     event ReferralPaid(address indexed referrer, uint256 amount);
-    event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
+    event OwnerWithdrew(
+        address indexed owner,
+        address indexed token,
+        uint256 amount
+    );
 
     modifier nonReentrant() {
         if (_locked != 1) revert ReentrancyDetected();
@@ -58,7 +62,7 @@ contract BiuBiuPremium {
 
     /**
      * @notice Subscribe to a premium tier
-     * @param tier The subscription tier (Weekly, Monthly, or Yearly)
+     * @param tier The subscription tier (Daily, Monthly, or Yearly)
      * @param referrer The referrer address (use address(0) for no referrer)
      */
     function subscribe(
@@ -89,7 +93,7 @@ contract BiuBiuPremium {
 
             // Use low-level call with limited gas to prevent griefing
             // If referrer payment fails, continue anyway (don't block subscription)
-            payable(referrer).call{value: referralAmount, gas: 10000}("");
+            payable(referrer).call{value: referralAmount}("");
 
             emit ReferralPaid(referrer, referralAmount);
         }
@@ -167,7 +171,11 @@ contract BiuBiuPremium {
             if (amount == 0) revert NoBalanceToWithdraw();
 
             (bool success, bytes memory data) = token.call(
-                abi.encodeWithSignature("transfer(address,uint256)", OWNER, amount)
+                abi.encodeWithSignature(
+                    "transfer(address,uint256)",
+                    OWNER,
+                    amount
+                )
             );
 
             if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
