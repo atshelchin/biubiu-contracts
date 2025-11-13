@@ -12,7 +12,6 @@ interface IBiuBiuPremium {
         Daily, // 1 day
         Monthly, // 30 days
         Yearly // 365 days
-
     }
 
     // Events

@@ -20,7 +20,6 @@ contract BiuBiuPremium {
         Daily, // 1 day
         Monthly, // 30 days
         Yearly // 365 days
-
     }
 
     // Tier pricing (immutable for gas optimization)
@@ -51,9 +50,17 @@ contract BiuBiuPremium {
     event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
 
     modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    function _nonReentrantBefore() private {
         if (_locked != 1) revert ReentrancyDetected();
         _locked = 2;
-        _;
+    }
+
+    function _nonReentrantAfter() private {
         _locked = 1;
     }
 
@@ -85,6 +92,7 @@ contract BiuBiuPremium {
 
             // Use low-level call with limited gas to prevent griefing
             // If referrer payment fails, continue anyway (don't block subscription)
+            // forge-lint: disable-next-line(unchecked-call)
             payable(referrer).call{value: referralAmount}("");
 
             emit ReferralPaid(referrer, referralAmount);
@@ -93,8 +101,9 @@ contract BiuBiuPremium {
         // Transfer all contract balance to owner
         // If transfer fails, don't block subscription - just keep funds in contract
         uint256 contractBalance = address(this).balance;
+        // We intentionally ignore the return value to prevent blocking subscriptions
+        // forge-lint: disable-next-line(unchecked-call)
         payable(OWNER).call{value: contractBalance}("");
-        // Note: We ignore the return value to prevent malicious owner from blocking subscriptions
 
         emit Subscribed(msg.sender, tier, newExpiry, referrer, referralAmount);
     }
