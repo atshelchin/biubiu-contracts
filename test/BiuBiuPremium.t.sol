@@ -34,17 +34,13 @@ contract BiuBiuPremiumTest is Test {
 
         uint256 ownerBalanceBefore = owner.balance;
 
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         // Owner receives payment automatically
         assertEq(owner.balance, ownerBalanceBefore + 0.01 ether);
 
         // Check subscription info
-        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium
-            .getSubscriptionInfo(user1);
+        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
         assertEq(expiryTime, block.timestamp + 1 days);
         assertEq(remainingTime, 1 days);
@@ -59,18 +55,14 @@ contract BiuBiuPremiumTest is Test {
         uint256 ownerBalanceBefore = owner.balance;
         uint256 referrerBalanceBefore = referrer.balance;
 
-        premium.subscribe{value: 0.05 ether}(
-            BiuBiuPremium.SubscriptionTier.Monthly,
-            referrer
-        );
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, referrer);
 
         // Check payments split 50/50
         assertEq(owner.balance, ownerBalanceBefore + 0.025 ether);
         assertEq(referrer.balance, referrerBalanceBefore + 0.025 ether);
 
         // Check subscription info
-        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium
-            .getSubscriptionInfo(user1);
+        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
         assertEq(expiryTime, block.timestamp + 30 days);
         assertEq(remainingTime, 30 days);
@@ -82,13 +74,9 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeYearly() public {
         vm.startPrank(user1);
 
-        premium.subscribe{value: 0.1 ether}(
-            BiuBiuPremium.SubscriptionTier.Yearly,
-            address(0)
-        );
+        premium.subscribe{value: 0.1 ether}(BiuBiuPremium.SubscriptionTier.Yearly, address(0));
 
-        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium
-            .getSubscriptionInfo(user1);
+        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
         assertEq(expiryTime, block.timestamp + 365 days);
         assertEq(remainingTime, 365 days);
@@ -101,20 +89,14 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // First subscription
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         uint256 firstExpiry = block.timestamp + 1 days;
 
         // Second subscription
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
-        (, uint256 expiryTime, ) = premium.getSubscriptionInfo(user1);
+        (, uint256 expiryTime,) = premium.getSubscriptionInfo(user1);
         assertEq(expiryTime, firstExpiry + 1 days);
 
         vm.stopPrank();
@@ -125,24 +107,18 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // First subscription
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         // Fast forward past expiry
         vm.warp(block.timestamp + 8 days);
 
-        (bool isPremium, , ) = premium.getSubscriptionInfo(user1);
+        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
         assertFalse(isPremium);
 
         // Subscribe again
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
-        (, uint256 newExpiry, ) = premium.getSubscriptionInfo(user1);
+        (, uint256 newExpiry,) = premium.getSubscriptionInfo(user1);
         assertEq(newExpiry, block.timestamp + 1 days);
 
         vm.stopPrank();
@@ -153,10 +129,7 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         vm.expectRevert(BiuBiuPremium.IncorrectPaymentAmount.selector);
-        premium.subscribe{value: 0.005 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.005 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         vm.stopPrank();
     }
@@ -168,16 +141,13 @@ contract BiuBiuPremiumTest is Test {
         uint256 ownerBalanceBefore = owner.balance;
 
         // User1 tries to refer themselves
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            user1
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, user1);
 
         // Owner receives full payment (no referral commission)
         assertEq(owner.balance, ownerBalanceBefore + 0.01 ether);
 
         // Subscription still succeeds
-        (bool isPremium, , ) = premium.getSubscriptionInfo(user1);
+        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
 
         vm.stopPrank();
@@ -185,8 +155,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test non-premium user
     function testNonPremiumUser() public view {
-        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium
-            .getSubscriptionInfo(user1);
+        (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium.getSubscriptionInfo(user1);
         assertFalse(isPremium);
         assertEq(expiryTime, 0);
         assertEq(remainingTime, 0);
@@ -201,17 +170,10 @@ contract BiuBiuPremiumTest is Test {
 
         vm.expectEmit(true, true, false, true);
         emit BiuBiuPremium.Subscribed(
-            user1,
-            BiuBiuPremium.SubscriptionTier.Monthly,
-            block.timestamp + 30 days,
-            referrer,
-            0.025 ether
+            user1, BiuBiuPremium.SubscriptionTier.Monthly, block.timestamp + 30 days, referrer, 0.025 ether
         );
 
-        premium.subscribe{value: 0.05 ether}(
-            BiuBiuPremium.SubscriptionTier.Monthly,
-            referrer
-        );
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, referrer);
 
         vm.stopPrank();
     }
@@ -226,14 +188,11 @@ contract BiuBiuPremiumTest is Test {
         // When attacker receives referral payment, it will try to reenter
         // With the new implementation, referrer payment failure doesn't block subscription
         vm.prank(user1);
-        premium.subscribe{value: 0.05 ether}(
-            BiuBiuPremium.SubscriptionTier.Monthly,
-            address(attacker)
-        );
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, address(attacker));
 
         // The subscription SHOULD succeed even if referrer payment failed
         // This is the optimized behavior - don't let malicious referrers block subscriptions
-        (bool isPremium, , ) = premium.getSubscriptionInfo(user1);
+        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
     }
 
@@ -241,21 +200,15 @@ contract BiuBiuPremiumTest is Test {
     function testMultipleUsers() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: 0.01 ether}(
-            BiuBiuPremium.SubscriptionTier.Daily,
-            address(0)
-        );
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         // User2 subscribes
         vm.prank(user2);
-        premium.subscribe{value: 0.05 ether}(
-            BiuBiuPremium.SubscriptionTier.Monthly,
-            address(0)
-        );
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         // Check both subscriptions
-        (bool isPremium1, , ) = premium.getSubscriptionInfo(user1);
-        (bool isPremium2, , ) = premium.getSubscriptionInfo(user2);
+        (bool isPremium1,,) = premium.getSubscriptionInfo(user1);
+        (bool isPremium2,,) = premium.getSubscriptionInfo(user2);
 
         assertTrue(isPremium1);
         assertTrue(isPremium2);
@@ -266,7 +219,7 @@ contract BiuBiuPremiumTest is Test {
         // Simulate someone accidentally sending ETH directly to contract
         vm.deal(user1, 1 ether);
         vm.prank(user1);
-        (bool sent, ) = address(premium).call{value: 1 ether}("");
+        (bool sent,) = address(premium).call{value: 1 ether}("");
         require(sent, "Failed to send Ether");
 
         // Check contract balance
@@ -288,7 +241,7 @@ contract BiuBiuPremiumTest is Test {
         // Send ETH to contract
         vm.deal(user2, 1 ether);
         vm.prank(user2);
-        (bool sent, ) = address(premium).call{value: 1 ether}("");
+        (bool sent,) = address(premium).call{value: 1 ether}("");
         require(sent, "Failed to send Ether");
 
         uint256 ownerBalanceBefore = owner.balance;
@@ -328,10 +281,7 @@ contract ReentrancyAttacker {
         if (!_attacked && address(this).balance >= 0.01 ether) {
             _attacked = true;
             // Try to reenter - should fail with "Reentrancy detected"
-            premium.subscribe{value: 0.01 ether}(
-                BiuBiuPremium.SubscriptionTier.Daily,
-                address(0)
-            );
+            premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
         }
     }
 }

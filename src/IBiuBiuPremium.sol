@@ -9,9 +9,10 @@ interface IBiuBiuPremium {
 
     // Subscription tier enum
     enum SubscriptionTier {
-        Daily,    // 1 day
-        Monthly,  // 30 days
-        Yearly    // 365 days
+        Daily, // 1 day
+        Monthly, // 30 days
+        Yearly // 365 days
+
     }
 
     // Events
@@ -29,7 +30,10 @@ interface IBiuBiuPremium {
     function subscribe(SubscriptionTier tier, address referrer) external payable;
 
     // Get user subscription info (isPremium, expiryTime, remainingTime)
-    function getSubscriptionInfo(address user) external view returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
+    function getSubscriptionInfo(address user)
+        external
+        view
+        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
 
     // Withdraw ETH or ERC20 tokens
     function ownerWithdraw(address token) external;

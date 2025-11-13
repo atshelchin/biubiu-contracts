@@ -20,9 +20,7 @@ contract BiuBiuPremiumScript is Script {
         bytes32 salt = bytes32(uint256(0));
 
         // Deploy via CREATE2 proxy
-        BiuBiuPremium premium = BiuBiuPremium(
-            payable(deployViaCREATE2Proxy(bytecode, salt))
-        );
+        BiuBiuPremium premium = BiuBiuPremium(payable(deployViaCREATE2Proxy(bytecode, salt)));
 
         console.log("BiuBiuPremium deployed at:", address(premium));
         console.log("Owner address:", premium.OWNER());
@@ -33,10 +31,7 @@ contract BiuBiuPremiumScript is Script {
         vm.stopBroadcast();
     }
 
-    function deployViaCREATE2Proxy(
-        bytes memory bytecode,
-        bytes32 salt
-    ) internal returns (address) {
+    function deployViaCREATE2Proxy(bytes memory bytecode, bytes32 salt) internal returns (address) {
         // Compute deterministic address
         address predictedAddress = computeCREATE2Address(bytecode, salt);
 
@@ -53,30 +48,14 @@ contract BiuBiuPremiumScript is Script {
         (bool success, bytes memory returnData) = CREATE2_PROXY.call(payload);
         require(success, "CREATE2 deployment failed");
 
-        address deployedAddress = address(
-            uint160(bytes20(returnData))
-        );
-        require(
-            deployedAddress == predictedAddress,
-            "Deployed address mismatch"
-        );
+        address deployedAddress = address(uint160(bytes20(returnData)));
+        require(deployedAddress == predictedAddress, "Deployed address mismatch");
 
         return deployedAddress;
     }
 
-    function computeCREATE2Address(
-        bytes memory bytecode,
-        bytes32 salt
-    ) internal pure returns (address) {
-        bytes32 hash = keccak256(
-            abi.encodePacked(
-                bytes1(0xff),
-                CREATE2_PROXY,
-                salt,
-                keccak256(bytecode)
-            )
-        );
+    function computeCREATE2Address(bytes memory bytecode, bytes32 salt) internal pure returns (address) {
+        bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), CREATE2_PROXY, salt, keccak256(bytecode)));
         return address(uint160(uint256(hash)));
     }
 }
-

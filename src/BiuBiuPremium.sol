@@ -20,6 +20,7 @@ contract BiuBiuPremium {
         Daily, // 1 day
         Monthly, // 30 days
         Yearly // 365 days
+
     }
 
     // Tier pricing (immutable for gas optimization)
@@ -47,11 +48,7 @@ contract BiuBiuPremium {
         uint256 referralAmount
     );
     event ReferralPaid(address indexed referrer, uint256 amount);
-    event OwnerWithdrew(
-        address indexed owner,
-        address indexed token,
-        uint256 amount
-    );
+    event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
 
     modifier nonReentrant() {
         if (_locked != 1) revert ReentrancyDetected();
@@ -65,10 +62,7 @@ contract BiuBiuPremium {
      * @param tier The subscription tier (Daily, Monthly, or Yearly)
      * @param referrer The referrer address (use address(0) for no referrer)
      */
-    function subscribe(
-        SubscriptionTier tier,
-        address referrer
-    ) external payable nonReentrant {
+    function subscribe(SubscriptionTier tier, address referrer) external payable nonReentrant {
         // Get price and duration based on tier
         (uint256 price, uint256 duration) = _getTierInfo(tier);
 
@@ -77,9 +71,7 @@ contract BiuBiuPremium {
 
         // Calculate new expiry time
         uint256 currentExpiry = subscriptionExpiry[msg.sender];
-        uint256 newExpiry = currentExpiry > block.timestamp
-            ? currentExpiry + duration
-            : block.timestamp + duration;
+        uint256 newExpiry = currentExpiry > block.timestamp ? currentExpiry + duration : block.timestamp + duration;
 
         subscriptionExpiry[msg.sender] = newExpiry;
 
@@ -113,9 +105,7 @@ contract BiuBiuPremium {
      * @return price The price in wei
      * @return duration The duration in seconds
      */
-    function _getTierInfo(
-        SubscriptionTier tier
-    ) private pure returns (uint256 price, uint256 duration) {
+    function _getTierInfo(SubscriptionTier tier) private pure returns (uint256 price, uint256 duration) {
         if (tier == SubscriptionTier.Daily) {
             return (DAILY_PRICE, DAILY_DURATION);
         } else if (tier == SubscriptionTier.Monthly) {
@@ -132,9 +122,7 @@ contract BiuBiuPremium {
      * @return expiryTime The subscription expiry timestamp
      * @return remainingTime The remaining time in seconds
      */
-    function getSubscriptionInfo(
-        address user
-    )
+    function getSubscriptionInfo(address user)
         external
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime)
@@ -157,26 +145,20 @@ contract BiuBiuPremium {
             amount = address(this).balance;
             if (amount == 0) revert NoBalanceToWithdraw();
 
-            (bool success, ) = payable(OWNER).call{value: amount}("");
+            (bool success,) = payable(OWNER).call{value: amount}("");
             if (!success) revert("ETH withdrawal failed");
         } else {
             // Withdraw ERC20 token
-            (bool balanceSuccess, bytes memory balanceData) = token.staticcall(
-                abi.encodeWithSignature("balanceOf(address)", address(this))
-            );
+            (bool balanceSuccess, bytes memory balanceData) =
+                token.staticcall(abi.encodeWithSignature("balanceOf(address)", address(this)));
 
             if (!balanceSuccess) revert("Failed to get token balance");
 
             amount = abi.decode(balanceData, (uint256));
             if (amount == 0) revert NoBalanceToWithdraw();
 
-            (bool success, bytes memory data) = token.call(
-                abi.encodeWithSignature(
-                    "transfer(address,uint256)",
-                    OWNER,
-                    amount
-                )
-            );
+            (bool success, bytes memory data) =
+                token.call(abi.encodeWithSignature("transfer(address,uint256)", OWNER, amount));
 
             if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
                 revert("Token withdrawal failed");
