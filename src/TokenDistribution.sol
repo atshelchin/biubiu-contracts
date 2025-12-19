@@ -76,6 +76,12 @@ contract TokenDistribution {
         uint256 deadline;
     }
 
+    struct FailedTransfer {
+        address to;
+        uint256 value;
+        bytes reason;
+    }
+
     // Errors
     error ReentrancyDetected();
     error BatchTooLarge();
@@ -86,10 +92,12 @@ contract TokenDistribution {
     error InvalidBatchId();
     error InvalidSignature();
     error InvalidProof();
+    error InvalidProofLength();
     error InvalidTokenType();
     error TransferFailed();
     error ETHTransferFailed();
     error RefundFailed();
+    error WithdrawalFailed();
 
     // Events
     event Distributed(
@@ -127,13 +135,15 @@ contract TokenDistribution {
     /// @param tokenId ERC1155 token ID (0 for others)
     /// @param recipients List of recipients (max 100)
     /// @param referrer Referrer address for fee sharing
+    /// @return totalDistributed Total amount successfully distributed
+    /// @return failed Array of failed transfers with details (address, value, reason)
     function distribute(
         address token,
         uint8 tokenType,
         uint256 tokenId,
         Recipient[] calldata recipients,
         address referrer
-    ) external payable nonReentrant {
+    ) external payable nonReentrant returns (uint256 totalDistributed, FailedTransfer[] memory failed) {
         uint256 len = recipients.length;
         if (len == 0 || len > MAX_BATCH_SIZE) revert BatchTooLarge();
 
@@ -148,18 +158,15 @@ contract TokenDistribution {
             _collectFee(NON_MEMBER_FEE, referrer);
         }
 
-        uint256 totalDistributed;
-        uint256 failedAmount;
-
         if (token == address(0)) {
             // Native ETH distribution
-            (totalDistributed, failedAmount) = _distributeETH(recipients, availableETH);
+            (totalDistributed, failed) = _distributeETH(recipients, availableETH);
         } else if (tokenType == TOKEN_TYPE_ERC20) {
-            (totalDistributed, failedAmount) = _distributeERC20(token, msg.sender, recipients);
+            (totalDistributed, failed) = _distributeERC20(token, msg.sender, recipients);
         } else if (tokenType == TOKEN_TYPE_ERC721) {
-            (totalDistributed, failedAmount) = _distributeERC721(token, msg.sender, recipients);
+            (totalDistributed, failed) = _distributeERC721(token, msg.sender, recipients);
         } else if (tokenType == TOKEN_TYPE_ERC1155) {
-            (totalDistributed, failedAmount) = _distributeERC1155(token, msg.sender, tokenId, recipients);
+            (totalDistributed, failed) = _distributeERC1155(token, msg.sender, tokenId, recipients);
         } else {
             revert InvalidTokenType();
         }
@@ -183,6 +190,8 @@ contract TokenDistribution {
     /// @param proofs Flattened Merkle proofs for all recipients
     /// @param proofLengths Length of each recipient's proof
     /// @param referrer Referrer address for fee sharing
+    /// @return batchAmount Total amount successfully distributed in this batch
+    /// @return failed Array of failed transfers with details (address, value, reason)
     function distributeWithAuth(
         DistributionAuth calldata auth,
         bytes calldata signature,
@@ -191,29 +200,41 @@ contract TokenDistribution {
         bytes32[] calldata proofs,
         uint8[] calldata proofLengths,
         address referrer
-    ) external payable nonReentrant {
-        // Validate inputs
-        _validateAuthInputs(auth, batchId, recipients.length, proofLengths.length);
-
-        // Verify signature and get signer
-        address signer = _verifySignature(auth, signature);
-
-        // Check premium and collect fee
-        _checkPremiumAndCollectFee(signer, referrer);
+    ) external payable nonReentrant returns (uint256 batchAmount, FailedTransfer[] memory failed) {
+        // Validate, verify signature, and update state in one call to reduce stack depth
+        address signer =
+            _validateVerifyAndUpdate(auth, signature, batchId, recipients.length, proofLengths.length, referrer);
 
         // Verify Merkle proofs
         _verifyMerkleProofs(auth.merkleRoot, batchId, recipients, proofs, proofLengths);
 
-        // Update state
+        // Execute distribution and finalize
+        (batchAmount, failed) = _executeAndFinalize(auth, signer, batchId, recipients);
+    }
+
+    function _validateVerifyAndUpdate(
+        DistributionAuth calldata auth,
+        bytes calldata signature,
+        uint256 batchId,
+        uint256 recipientsLen,
+        uint256 proofLengthsLen,
+        address referrer
+    ) internal returns (address signer) {
+        _validateAuthInputs(auth, batchId, recipientsLen, proofLengthsLen);
+        signer = _verifySignature(auth, signature);
+        _checkPremiumAndCollectFee(signer, referrer);
         _updateBatchState(auth.uuid, batchId, auth.totalBatches);
+    }
 
-        // Execute distribution
-        uint256 batchAmount = _executeDistribution(auth, signer, recipients);
+    function _executeAndFinalize(
+        DistributionAuth calldata auth,
+        address signer,
+        uint256 batchId,
+        Recipient[] calldata recipients
+    ) internal returns (uint256 batchAmount, FailedTransfer[] memory failed) {
+        (batchAmount, failed) = _executeDistribution(auth, signer, recipients);
         distributedAmount[auth.uuid] += batchAmount;
-
-        // Refund unused ETH to signer
         _refundETH(signer);
-
         emit DistributedWithAuth(auth.uuid, signer, batchId, recipients.length, batchAmount);
     }
 
@@ -248,16 +269,16 @@ contract TokenDistribution {
 
     function _executeDistribution(DistributionAuth calldata auth, address signer, Recipient[] calldata recipients)
         internal
-        returns (uint256 batchAmount)
+        returns (uint256 batchAmount, FailedTransfer[] memory failed)
     {
         if (auth.tokenType == TOKEN_TYPE_WETH) {
-            (batchAmount,) = _distributeWETH(signer, recipients);
+            (batchAmount, failed) = _distributeWETH(signer, recipients);
         } else if (auth.tokenType == TOKEN_TYPE_ERC20) {
-            (batchAmount,) = _distributeERC20(auth.token, signer, recipients);
+            (batchAmount, failed) = _distributeERC20(auth.token, signer, recipients);
         } else if (auth.tokenType == TOKEN_TYPE_ERC721) {
-            (batchAmount,) = _distributeERC721(auth.token, signer, recipients);
+            (batchAmount, failed) = _distributeERC721(auth.token, signer, recipients);
         } else if (auth.tokenType == TOKEN_TYPE_ERC1155) {
-            (batchAmount,) = _distributeERC1155(auth.token, signer, auth.tokenId, recipients);
+            (batchAmount, failed) = _distributeERC1155(auth.token, signer, auth.tokenId, recipients);
         } else {
             revert InvalidTokenType();
         }
@@ -290,15 +311,20 @@ contract TokenDistribution {
     // ============ Internal Functions ============
 
     function _collectFee(uint256 fee, address referrer) internal {
+        uint256 ownerAmount = fee;
+
         if (referrer != address(0) && referrer != msg.sender) {
             uint256 referralAmount = fee >> 1; // 50%
+            ownerAmount = fee - referralAmount; // Remaining 50% for owner
             (bool success,) = payable(referrer).call{value: referralAmount}("");
             if (success) {
                 emit ReferralPaid(referrer, referralAmount);
+            } else {
+                // If referrer transfer fails, owner gets the full fee
+                ownerAmount = fee;
             }
         }
 
-        uint256 ownerAmount = address(this).balance > fee ? fee : address(this).balance;
         if (ownerAmount > 0) {
             (bool success,) = payable(OWNER).call{value: ownerAmount}("");
             if (success) {
@@ -309,16 +335,20 @@ contract TokenDistribution {
 
     function _distributeETH(Recipient[] calldata recipients, uint256 availableETH)
         internal
-        returns (uint256 totalDistributed, uint256 failedAmount)
+        returns (uint256 totalDistributed, FailedTransfer[] memory failed)
     {
         uint256 len = recipients.length;
+        // Pre-allocate max possible size, will resize at end
+        FailedTransfer[] memory tempFailed = new FailedTransfer[](len);
+        uint256 failedCount;
+
         for (uint256 i; i < len;) {
             Recipient calldata r = recipients[i];
             if (r.to == address(0)) {
-                failedAmount += r.value;
+                tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "zero address");
                 emit TransferSkipped(r.to, r.value, "zero address");
             } else if (availableETH < r.value) {
-                failedAmount += r.value;
+                tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "insufficient ETH");
                 emit TransferSkipped(r.to, r.value, "insufficient ETH");
             } else {
                 availableETH -= r.value;
@@ -326,10 +356,19 @@ contract TokenDistribution {
                 if (success) {
                     totalDistributed += r.value;
                 } else {
-                    failedAmount += r.value;
+                    tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "transfer failed");
                     emit TransferSkipped(r.to, r.value, "transfer failed");
                 }
             }
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Resize array to actual failed count
+        failed = new FailedTransfer[](failedCount);
+        for (uint256 i; i < failedCount;) {
+            failed[i] = tempFailed[i];
             unchecked {
                 ++i;
             }
@@ -338,7 +377,7 @@ contract TokenDistribution {
 
     function _distributeWETH(address from, Recipient[] calldata recipients)
         internal
-        returns (uint256 totalDistributed, uint256 failedAmount)
+        returns (uint256 totalDistributed, FailedTransfer[] memory failed)
     {
         uint256 len = recipients.length;
 
@@ -364,21 +403,34 @@ contract TokenDistribution {
             revert TransferFailed();
         }
 
+        // Pre-allocate max possible size
+        FailedTransfer[] memory tempFailed = new FailedTransfer[](len);
+        uint256 failedCount;
+
         // Distribute ETH
         for (uint256 i; i < len;) {
             Recipient calldata r = recipients[i];
             if (r.to == address(0)) {
-                failedAmount += r.value;
+                tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "zero address");
                 emit TransferSkipped(r.to, r.value, "zero address");
             } else {
                 (bool success,) = payable(r.to).call{value: r.value}("");
                 if (success) {
                     totalDistributed += r.value;
                 } else {
-                    failedAmount += r.value;
+                    tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "transfer failed");
                     emit TransferSkipped(r.to, r.value, "transfer failed");
                 }
             }
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Resize array to actual failed count
+        failed = new FailedTransfer[](failedCount);
+        for (uint256 i; i < failedCount;) {
+            failed[i] = tempFailed[i];
             unchecked {
                 ++i;
             }
@@ -387,27 +439,38 @@ contract TokenDistribution {
 
     function _distributeERC20(address token, address from, Recipient[] calldata recipients)
         internal
-        returns (uint256 totalDistributed, uint256 failedAmount)
+        returns (uint256 totalDistributed, FailedTransfer[] memory failed)
     {
         uint256 len = recipients.length;
+        FailedTransfer[] memory tempFailed = new FailedTransfer[](len);
+        uint256 failedCount;
+
         for (uint256 i; i < len;) {
             Recipient calldata r = recipients[i];
             if (r.to == address(0)) {
-                failedAmount += r.value;
+                tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "zero address");
                 emit TransferSkipped(r.to, r.value, "zero address");
             } else {
                 try IERC20(token).transferFrom(from, r.to, r.value) returns (bool success) {
                     if (success) {
                         totalDistributed += r.value;
                     } else {
-                        failedAmount += r.value;
+                        tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "transfer returned false");
                         emit TransferSkipped(r.to, r.value, "transfer returned false");
                     }
                 } catch (bytes memory reason) {
-                    failedAmount += r.value;
+                    tempFailed[failedCount++] = FailedTransfer(r.to, r.value, reason);
                     emit TransferSkipped(r.to, r.value, reason);
                 }
             }
+            unchecked {
+                ++i;
+            }
+        }
+
+        failed = new FailedTransfer[](failedCount);
+        for (uint256 i; i < failedCount;) {
+            failed[i] = tempFailed[i];
             unchecked {
                 ++i;
             }
@@ -416,23 +479,34 @@ contract TokenDistribution {
 
     function _distributeERC721(address token, address from, Recipient[] calldata recipients)
         internal
-        returns (uint256 totalDistributed, uint256 failedAmount)
+        returns (uint256 totalDistributed, FailedTransfer[] memory failed)
     {
         uint256 len = recipients.length;
+        FailedTransfer[] memory tempFailed = new FailedTransfer[](len);
+        uint256 failedCount;
+
         for (uint256 i; i < len;) {
             Recipient calldata r = recipients[i];
             uint256 tokenId = r.value; // value stores tokenId for ERC721
             if (r.to == address(0)) {
-                failedAmount += 1;
+                tempFailed[failedCount++] = FailedTransfer(r.to, tokenId, "zero address");
                 emit TransferSkipped(r.to, tokenId, "zero address");
             } else {
                 try IERC721(token).transferFrom(from, r.to, tokenId) {
                     totalDistributed += 1;
                 } catch (bytes memory reason) {
-                    failedAmount += 1;
+                    tempFailed[failedCount++] = FailedTransfer(r.to, tokenId, reason);
                     emit TransferSkipped(r.to, tokenId, reason);
                 }
             }
+            unchecked {
+                ++i;
+            }
+        }
+
+        failed = new FailedTransfer[](failedCount);
+        for (uint256 i; i < failedCount;) {
+            failed[i] = tempFailed[i];
             unchecked {
                 ++i;
             }
@@ -441,22 +515,33 @@ contract TokenDistribution {
 
     function _distributeERC1155(address token, address from, uint256 tokenId, Recipient[] calldata recipients)
         internal
-        returns (uint256 totalDistributed, uint256 failedAmount)
+        returns (uint256 totalDistributed, FailedTransfer[] memory failed)
     {
         uint256 len = recipients.length;
+        FailedTransfer[] memory tempFailed = new FailedTransfer[](len);
+        uint256 failedCount;
+
         for (uint256 i; i < len;) {
             Recipient calldata r = recipients[i];
             if (r.to == address(0)) {
-                failedAmount += r.value;
+                tempFailed[failedCount++] = FailedTransfer(r.to, r.value, "zero address");
                 emit TransferSkipped(r.to, r.value, "zero address");
             } else {
                 try IERC1155(token).safeTransferFrom(from, r.to, tokenId, r.value, "") {
                     totalDistributed += r.value;
                 } catch (bytes memory reason) {
-                    failedAmount += r.value;
+                    tempFailed[failedCount++] = FailedTransfer(r.to, r.value, reason);
                     emit TransferSkipped(r.to, r.value, reason);
                 }
             }
+            unchecked {
+                ++i;
+            }
+        }
+
+        failed = new FailedTransfer[](failedCount);
+        for (uint256 i; i < failedCount;) {
+            failed[i] = tempFailed[i];
             unchecked {
                 ++i;
             }
@@ -513,13 +598,25 @@ contract TokenDistribution {
         bytes32[] calldata proofs,
         uint8[] calldata proofLengths
     ) internal pure {
+        // Calculate total proof elements needed
+        uint256 totalProofLen;
+        uint256 recipientsLen = recipients.length;
+        for (uint256 i; i < recipientsLen;) {
+            totalProofLen += proofLengths[i];
+            unchecked {
+                ++i;
+            }
+        }
+
+        // Verify proofs array has enough elements
+        if (proofs.length < totalProofLen) revert InvalidProofLength();
+
         uint256 proofOffset;
         uint256 baseIndex = batchId * MAX_BATCH_SIZE;
 
-        for (uint256 i; i < recipients.length;) {
+        for (uint256 i; i < recipientsLen;) {
             // Compute leaf: keccak256(index, recipient, value)
-            bytes32 computedHash =
-                keccak256(abi.encodePacked(baseIndex + i, recipients[i].to, recipients[i].value));
+            bytes32 computedHash = keccak256(abi.encodePacked(baseIndex + i, recipients[i].to, recipients[i].value));
 
             // Verify proof inline
             uint8 proofLen = proofLengths[i];
@@ -546,4 +643,31 @@ contract TokenDistribution {
 
     /// @notice Allow contract to receive ETH
     receive() external payable {}
+
+    /// @notice Withdraw stuck ETH or ERC20 tokens to OWNER
+    /// @param token Token address (address(0) for ETH)
+    /// @dev Can be called by anyone, but funds always go to OWNER
+    function ownerWithdraw(address token) external nonReentrant {
+        if (token == address(0)) {
+            uint256 balance = address(this).balance;
+            if (balance == 0) revert WithdrawalFailed();
+            (bool success,) = payable(OWNER).call{value: balance}("");
+            if (!success) revert WithdrawalFailed();
+        } else {
+            // Get balance using staticcall
+            (bool success, bytes memory data) =
+                token.staticcall(abi.encodeWithSelector(bytes4(keccak256("balanceOf(address)")), address(this)));
+            if (!success || data.length < 32) revert WithdrawalFailed();
+
+            uint256 balance = abi.decode(data, (uint256));
+            if (balance == 0) revert WithdrawalFailed();
+
+            // Transfer using transfer(address,uint256)
+            (success, data) =
+                token.call(abi.encodeWithSelector(bytes4(keccak256("transfer(address,uint256)")), OWNER, balance));
+            // For tokens that don't return bool, check if call succeeded
+            if (!success) revert WithdrawalFailed();
+            if (data.length > 0 && !abi.decode(data, (bool))) revert WithdrawalFailed();
+        }
+    }
 }

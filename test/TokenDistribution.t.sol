@@ -53,10 +53,7 @@ contract MockERC721 {
 
     function transferFrom(address from, address to, uint256 tokenId) external {
         require(ownerOf[tokenId] == from, "not owner");
-        require(
-            msg.sender == from || isApprovedForAll[from][msg.sender],
-            "not approved"
-        );
+        require(msg.sender == from || isApprovedForAll[from][msg.sender], "not approved");
         ownerOf[tokenId] = to;
     }
 }
@@ -75,10 +72,7 @@ contract MockERC1155 {
 
     function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata) external {
         require(balanceOf[id][from] >= amount, "insufficient balance");
-        require(
-            msg.sender == from || isApprovedForAll[from][msg.sender],
-            "not approved"
-        );
+        require(msg.sender == from || isApprovedForAll[from][msg.sender], "not approved");
         balanceOf[id][from] -= amount;
         balanceOf[id][to] += amount;
     }
@@ -91,11 +85,7 @@ contract MockBiuBiuPremium {
         isPremium[user] = status;
     }
 
-    function getSubscriptionInfo(address user)
-        external
-        view
-        returns (bool, uint256, uint256)
-    {
+    function getSubscriptionInfo(address user) external view returns (bool, uint256, uint256) {
         return (isPremium[user], block.timestamp + 30 days, 30 days);
     }
 }
@@ -130,11 +120,7 @@ contract TokenDistributionTest is Test {
         bool isPremium
     );
     event DistributedWithAuth(
-        bytes32 indexed uuid,
-        address indexed signer,
-        uint256 batchId,
-        uint256 recipientCount,
-        uint256 batchAmount
+        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount
     );
     event TransferSkipped(address indexed recipient, uint256 value, bytes reason);
     event Refunded(address indexed to, uint256 amount);
@@ -182,18 +168,16 @@ contract TokenDistributionTest is Test {
     {
         TokenDistribution.Recipient[] memory recipients = new TokenDistribution.Recipient[](count);
         for (uint256 i = 0; i < count; i++) {
-            recipients[i] = TokenDistribution.Recipient({
-                to: address(uint160(0x1000 + i)),
-                value: amountEach
-            });
+            recipients[i] = TokenDistribution.Recipient({to: address(uint160(0x1000 + i)), value: amountEach});
         }
         return recipients;
     }
 
-    function _signDistributionAuth(
-        TokenDistribution.DistributionAuth memory auth,
-        uint256 privateKey
-    ) internal view returns (bytes memory) {
+    function _signDistributionAuth(TokenDistribution.DistributionAuth memory auth, uint256 privateKey)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes32 structHash = keccak256(
             abi.encode(
                 distribution.DISTRIBUTION_AUTH_TYPEHASH(),
@@ -208,9 +192,7 @@ contract TokenDistributionTest is Test {
             )
         );
 
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash)
-        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
         return abi.encodePacked(r, s, v);
@@ -349,13 +331,7 @@ contract TokenDistributionTest is Test {
         uint256 protocolOwnerBalanceBefore = PROTOCOL_OWNER.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 2 ether + NON_MEMBER_FEE}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 2 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, address(0));
 
         // Recipients received ETH
         assertEq(address(uint160(0x1000)).balance, 1 ether);
@@ -373,13 +349,7 @@ contract TokenDistributionTest is Test {
         uint256 referrerBalanceBefore = referrer.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 1 ether + NON_MEMBER_FEE}(
-            address(0),
-            0,
-            0,
-            recipients,
-            referrer
-        );
+        distribution.distribute{value: 1 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, referrer);
 
         // Referrer received 50% of fee
         assertEq(referrer.balance, referrerBalanceBefore + NON_MEMBER_FEE / 2);
@@ -393,13 +363,7 @@ contract TokenDistributionTest is Test {
         uint256 aliceBalanceBefore = alice.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 5 ether}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 5 ether}(address(0), 0, 0, recipients, address(0));
 
         // Alice should get 4 ETH back
         assertEq(alice.balance, aliceBalanceBefore - 1 ether);
@@ -413,11 +377,7 @@ contract TokenDistributionTest is Test {
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.InsufficientPayment.selector);
         distribution.distribute{value: 0.004 ether}( // Less than NON_MEMBER_FEE
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
+            address(0), 0, 0, recipients, address(0)
         );
     }
 
@@ -428,13 +388,7 @@ contract TokenDistributionTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.BatchTooLarge.selector);
-        distribution.distribute{value: 1.01 ether}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 1.01 ether}(address(0), 0, 0, recipients, address(0));
     }
 
     function test_DistributeETH_EmptyRecipientsReverts() public {
@@ -444,13 +398,7 @@ contract TokenDistributionTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.BatchTooLarge.selector);
-        distribution.distribute{value: 0}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 0}(address(0), 0, 0, recipients, address(0));
     }
 
     function test_DistributeETH_SkipsZeroAddress() public {
@@ -463,13 +411,7 @@ contract TokenDistributionTest is Test {
         uint256 aliceBalanceBefore = alice.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 2 ether}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 2 ether}(address(0), 0, 0, recipients, address(0));
 
         // Bob received his ETH
         assertEq(bob.balance, 101 ether); // 100 initial + 1
@@ -516,13 +458,7 @@ contract TokenDistributionTest is Test {
         TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 100 ether);
 
         vm.prank(alice);
-        distribution.distribute{value: NON_MEMBER_FEE}(
-            address(mockToken),
-            1,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: NON_MEMBER_FEE}(address(mockToken), 1, 0, recipients, address(0));
 
         assertEq(mockToken.balanceOf(address(uint160(0x1000))), 100 ether);
     }
@@ -687,13 +623,7 @@ contract TokenDistributionTest is Test {
 
         vm.prank(executor);
         distribution.distributeWithAuth{value: NON_MEMBER_FEE}(
-            auth,
-            signature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
+            auth, signature, 0, recipients, allProofs, proofLengths, address(0)
         );
 
         assertGt(PROTOCOL_OWNER.balance, protocolOwnerBefore);
@@ -724,15 +654,7 @@ contract TokenDistributionTest is Test {
 
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.DeadlineExpired.selector);
-        distribution.distributeWithAuth(
-            auth,
-            signature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
-        );
+        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
     }
 
     function test_DistributeWithAuth_BatchAlreadyExecutedReverts() public {
@@ -763,28 +685,12 @@ contract TokenDistributionTest is Test {
 
         // Execute first time
         vm.prank(executor);
-        distribution.distributeWithAuth(
-            auth,
-            signature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
-        );
+        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
 
         // Try to execute same batch again
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.BatchAlreadyExecuted.selector);
-        distribution.distributeWithAuth(
-            auth,
-            signature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
-        );
+        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
     }
 
     function test_DistributeWithAuth_InvalidBatchIdReverts() public {
@@ -870,15 +776,7 @@ contract TokenDistributionTest is Test {
 
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.InvalidSignature.selector);
-        distribution.distributeWithAuth(
-            auth,
-            malleableSignature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
-        );
+        distribution.distributeWithAuth(auth, malleableSignature, 0, recipients, allProofs, proofLengths, address(0));
     }
 
     function test_DistributeWithAuth_InvalidSignatureLengthReverts() public {
@@ -906,15 +804,7 @@ contract TokenDistributionTest is Test {
 
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.InvalidSignature.selector);
-        distribution.distributeWithAuth(
-            auth,
-            signature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
-        );
+        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
     }
 
     // ============ Progress Tracking Tests ============
@@ -977,13 +867,7 @@ contract TokenDistributionTest is Test {
         TokenDistribution.Recipient[] memory recipients = _createRecipients(100, 0.01 ether);
 
         vm.prank(alice);
-        distribution.distribute{value: 1 ether}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 1 ether}(address(0), 0, 0, recipients, address(0));
 
         // All 100 recipients should have received ETH
         for (uint256 i = 0; i < 100; i++) {
@@ -1027,15 +911,7 @@ contract TokenDistributionTest is Test {
         proofLengths[1] = uint8(proof1.length);
 
         vm.prank(executor);
-        distribution.distributeWithAuth(
-            auth,
-            signature,
-            0,
-            recipients,
-            allProofs,
-            proofLengths,
-            address(0)
-        );
+        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
 
         assertEq(mockToken.balanceOf(address(uint160(0x1000))), 100 ether);
         assertEq(mockToken.balanceOf(address(uint160(0x1001))), 100 ether);
@@ -1055,13 +931,7 @@ contract TokenDistributionTest is Test {
         vm.deal(alice, totalAmount + 1 ether);
 
         vm.prank(alice);
-        distribution.distribute{value: totalAmount}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: totalAmount}(address(0), 0, 0, recipients, address(0));
 
         // Verify first recipient
         assertEq(address(uint160(0x1000)).balance, amountEach);
@@ -1078,13 +948,7 @@ contract TokenDistributionTest is Test {
         emit Distributed(alice, address(0), 0, 2, 2 ether, true);
 
         vm.prank(alice);
-        distribution.distribute{value: 2 ether}(
-            address(0),
-            0,
-            0,
-            recipients,
-            address(0)
-        );
+        distribution.distribute{value: 2 ether}(address(0), 0, 0, recipients, address(0));
     }
 
     function test_EmitsReferralPaidEvent() public {
@@ -1096,12 +960,97 @@ contract TokenDistributionTest is Test {
         emit ReferralPaid(referrer, NON_MEMBER_FEE / 2);
 
         vm.prank(alice);
-        distribution.distribute{value: 1 ether + NON_MEMBER_FEE}(
-            address(0),
-            0,
-            0,
-            recipients,
-            referrer
-        );
+        distribution.distribute{value: 1 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, referrer);
+    }
+
+    // ============ Owner Withdraw Tests ============
+
+    function test_OwnerWithdrawETH() public {
+        // Send some ETH to the contract
+        vm.deal(address(distribution), 1 ether);
+
+        uint256 ownerBalanceBefore = PROTOCOL_OWNER.balance;
+
+        distribution.ownerWithdraw(address(0));
+
+        assertEq(PROTOCOL_OWNER.balance, ownerBalanceBefore + 1 ether);
+        assertEq(address(distribution).balance, 0);
+    }
+
+    function test_OwnerWithdrawETH_NoBalance() public {
+        vm.expectRevert(TokenDistribution.WithdrawalFailed.selector);
+        distribution.ownerWithdraw(address(0));
+    }
+
+    function test_OwnerWithdrawERC20() public {
+        // Mint tokens to the distribution contract
+        mockToken.mint(address(distribution), 100 ether);
+
+        uint256 ownerBalanceBefore = mockToken.balanceOf(PROTOCOL_OWNER);
+
+        distribution.ownerWithdraw(address(mockToken));
+
+        assertEq(mockToken.balanceOf(PROTOCOL_OWNER), ownerBalanceBefore + 100 ether);
+        assertEq(mockToken.balanceOf(address(distribution)), 0);
+    }
+
+    function test_OwnerWithdrawERC20_NoBalance() public {
+        vm.expectRevert(TokenDistribution.WithdrawalFailed.selector);
+        distribution.ownerWithdraw(address(mockToken));
+    }
+
+    // ============ Proof Length Validation Tests ============
+
+    function test_DistributeWithAuth_InvalidProofLengthReverts() public {
+        mockPremium.setPremium(ownerFromKey, true);
+
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+            uuid: bytes32(uint256(100)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 2 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = _signDistributionAuth(auth, ownerPrivateKey);
+
+        // proofLengths says we need 2 proofs, but we only provide 1
+        bytes32[] memory allProofs = new bytes32[](1);
+        allProofs[0] = bytes32(uint256(1));
+        uint8[] memory proofLengths = new uint8[](2);
+        proofLengths[0] = 1;
+        proofLengths[1] = 1; // Says we need 2 total proof elements, but only 1 provided
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidProofLength.selector);
+        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+    }
+
+    // ============ Fee Collection Fix Test ============
+
+    function test_FeeCollection_ReferrerGets50Percent() public {
+        mockPremium.setPremium(alice, false);
+
+        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 0.1 ether);
+
+        uint256 referrerBalanceBefore = referrer.balance;
+        uint256 ownerBalanceBefore = PROTOCOL_OWNER.balance;
+
+        vm.prank(alice);
+        distribution.distribute{value: 0.1 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, referrer);
+
+        // Referrer should get exactly 50%
+        assertEq(referrer.balance, referrerBalanceBefore + NON_MEMBER_FEE / 2);
+        // Owner should get the remaining 50%
+        assertEq(PROTOCOL_OWNER.balance, ownerBalanceBefore + NON_MEMBER_FEE / 2);
     }
 }

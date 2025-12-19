@@ -1,66 +1,91 @@
-## Foundry
+# BiuBiu Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A collection of smart contracts for token creation, NFT minting, token distribution, and utility functions.
 
-Foundry consists of:
+## Contracts
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
+- **WETH** - Wrapped ETH with `depositAndApprove` functionality
+- **TokenFactory** - CREATE2 deterministic ERC20 token deployment
+- **NFTFactory** - ERC721 with stake-to-mint mechanism
+- **TokenDistribution** - Batch distribute ETH/ERC20/ERC721/ERC1155 to multiple recipients
+- **TokenSweep** - Sweep tokens from multiple wallets
+- **BiuBiuPremium** - Premium membership subscription
 
 ## Usage
 
 ### Build
 
 ```shell
-$ forge build
+forge build
 ```
 
 ### Test
 
 ```shell
-$ forge test
+forge test
+```
+
+### Test with Verbosity
+
+```shell
+forge test -vvv
+```
+
+### Test Specific Contract
+
+```shell
+forge test --match-contract TokenDistributionTest
 ```
 
 ### Format
 
 ```shell
-$ forge fmt
+forge fmt
 ```
 
 ### Gas Snapshots
 
 ```shell
-$ forge snapshot
+forge snapshot
 ```
 
-### Anvil
+### Compute CREATE2 Addresses
 
 ```shell
-$ anvil
+forge clean && forge script script/ComputeAllAddresses.s.sol -vvvv
+```
+
+### Local Development
+
+```shell
+anvil
 ```
 
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+forge script script/DeployTokenFactory.s.sol --rpc-url <your_rpc_url> --private-key <your_private_key> --broadcast
 ```
 
-### Cast
+### Verify Deployment
 
 ```shell
-$ cast <subcommand>
+forge script script/VerifyDeployment.s.sol --rpc-url <your_rpc_url>
 ```
 
-### Help
+## CREATE2 Deterministic Addresses
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+Using CREATE2 Proxy `0x4e59b44847b379578588920cA78FbF26c0B4956C` with salt `0`:
+
+| Contract | Address |
+|----------|---------|
+| WETH | `0xe3E75C1fe9AE82993FEb6F9CA2e9627aaE1e3d18` |
+| TokenDistribution | `0xD35cE8751e46D518D4bb650e271696903BaFF70C` |
+| TokenFactory | `0xd53219D61e6F7305d5D6e23F29197F3AD58521E1` |
+| NFTFactory | `0xB003AdCD063aAAe88A634aC65257820c1322751D` |
+| TokenSweep | `0x28ab612a3a871EA203aDff9a7b0846C395529239` |
+| BiuBiuPremium | `0xc5c4bb399938625523250B708dc5c1e7dE4b1626` |
+
+## Documentation
+
+https://book.getfoundry.sh/
