@@ -69,6 +69,25 @@ contract WETH {
     }
 
     /**
+     * @notice Withdraw a specific amount of WETH and receive native coin
+     * @param amount The amount to withdraw
+     * @dev Uses CEI (Checks-Effects-Interactions) pattern for reentrancy protection
+     */
+    function withdraw(uint256 amount) public {
+        require(amount > 0, "WETH: amount must be greater than 0");
+        require(balanceOf[msg.sender] >= amount, "WETH: insufficient balance");
+
+        balanceOf[msg.sender] -= amount;
+        totalSupply -= amount;
+
+        (bool success,) = msg.sender.call{value: amount}("");
+        require(success, "WETH: ETH transfer failed");
+
+        emit Withdrawal(msg.sender, amount);
+        emit Transfer(msg.sender, address(0), amount);
+    }
+
+    /**
      * @notice Transfer WETH to another address
      * @param to The recipient address
      * @param value The amount to transfer

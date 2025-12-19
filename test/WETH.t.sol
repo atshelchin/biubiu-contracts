@@ -218,6 +218,125 @@ contract WETHTest is Test {
         vm.stopPrank();
     }
 
+    // ========== Withdraw(uint256) Tests ==========
+
+    function test_WithdrawAmount() public {
+        vm.startPrank(alice);
+
+        weth.deposit{value: 10 ether}();
+        uint256 balanceBefore = alice.balance;
+
+        vm.expectEmit(true, false, false, true);
+        emit Withdrawal(alice, 3 ether);
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(alice, address(0), 3 ether);
+
+        weth.withdraw(3 ether);
+
+        assertEq(weth.balanceOf(alice), 7 ether);
+        assertEq(weth.totalSupply(), 7 ether);
+        assertEq(alice.balance, balanceBefore + 3 ether);
+        assertEq(address(weth).balance, 7 ether);
+
+        vm.stopPrank();
+    }
+
+    function test_WithdrawAmountMultipleTimes() public {
+        vm.startPrank(alice);
+
+        weth.deposit{value: 10 ether}();
+        uint256 balanceBefore = alice.balance;
+
+        weth.withdraw(2 ether);
+        assertEq(weth.balanceOf(alice), 8 ether);
+
+        weth.withdraw(3 ether);
+        assertEq(weth.balanceOf(alice), 5 ether);
+
+        weth.withdraw(5 ether);
+        assertEq(weth.balanceOf(alice), 0);
+
+        assertEq(alice.balance, balanceBefore + 10 ether);
+        assertEq(weth.totalSupply(), 0);
+
+        vm.stopPrank();
+    }
+
+    function test_WithdrawAmountZeroReverts() public {
+        vm.startPrank(alice);
+
+        weth.deposit{value: 5 ether}();
+
+        vm.expectRevert("WETH: amount must be greater than 0");
+        weth.withdraw(0);
+
+        vm.stopPrank();
+    }
+
+    function test_WithdrawAmountInsufficientBalanceReverts() public {
+        vm.startPrank(alice);
+
+        weth.deposit{value: 5 ether}();
+
+        vm.expectRevert("WETH: insufficient balance");
+        weth.withdraw(10 ether);
+
+        vm.stopPrank();
+    }
+
+    function test_WithdrawAmountExactBalance() public {
+        vm.startPrank(alice);
+
+        weth.deposit{value: 5 ether}();
+        uint256 balanceBefore = alice.balance;
+
+        weth.withdraw(5 ether);
+
+        assertEq(weth.balanceOf(alice), 0);
+        assertEq(alice.balance, balanceBefore + 5 ether);
+        assertEq(weth.totalSupply(), 0);
+
+        vm.stopPrank();
+    }
+
+    function test_WithdrawAmountAfterTransfer() public {
+        vm.prank(alice);
+        weth.deposit{value: 10 ether}();
+
+        vm.prank(alice);
+        weth.transfer(bob, 6 ether);
+
+        // Alice can only withdraw remaining 4 ether
+        vm.startPrank(alice);
+        weth.withdraw(4 ether);
+        assertEq(weth.balanceOf(alice), 0);
+        vm.stopPrank();
+
+        // Bob can withdraw his 6 ether
+        uint256 bobBalanceBefore = bob.balance;
+        vm.prank(bob);
+        weth.withdraw(6 ether);
+        assertEq(bob.balance, bobBalanceBefore + 6 ether);
+    }
+
+    function testFuzz_WithdrawAmount(uint96 depositAmount, uint96 withdrawAmount) public {
+        vm.assume(depositAmount > 0);
+        vm.assume(withdrawAmount > 0);
+        vm.assume(withdrawAmount <= depositAmount);
+        vm.deal(alice, depositAmount);
+
+        vm.prank(alice);
+        weth.deposit{value: depositAmount}();
+
+        uint256 balanceBefore = alice.balance;
+
+        vm.prank(alice);
+        weth.withdraw(withdrawAmount);
+
+        assertEq(alice.balance, balanceBefore + withdrawAmount);
+        assertEq(weth.balanceOf(alice), depositAmount - withdrawAmount);
+    }
+
     // ========== Transfer Tests ==========
 
     function test_Transfer() public {
