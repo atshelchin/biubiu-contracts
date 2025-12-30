@@ -59,4 +59,27 @@ contract TokenFactoryScript is Script {
         bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), CREATE2_PROXY, salt, keccak256(bytecode)));
         return address(uint160(uint256(hash)));
     }
+
+    /// @notice Get the deterministic deployment address without deploying
+    function getDeploymentAddress() external pure returns (address) {
+        bytes memory bytecode = type(TokenFactory).creationCode;
+        bytes32 salt = bytes32(uint256(0));
+        return computeCreate2Address(bytecode, salt);
+    }
+
+    /// @notice Get the deterministic deployment address with custom salt
+    function getDeploymentAddress(bytes32 salt) external pure returns (address) {
+        bytes memory bytecode = type(TokenFactory).creationCode;
+        return computeCreate2Address(bytecode, salt);
+    }
+
+    /// @notice Print the deterministic deployment address (for CLI use)
+    function printAddress() external pure {
+        bytes memory bytecode = type(TokenFactory).creationCode;
+        bytes32 salt = bytes32(uint256(0));
+        address predicted = computeCreate2Address(bytecode, salt);
+        console.log("TokenFactory deterministic address:", predicted);
+        console.log("Salt:", uint256(salt));
+        console.log("Bytecode hash:", uint256(keccak256(bytecode)));
+    }
 }

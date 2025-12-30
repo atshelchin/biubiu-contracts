@@ -120,7 +120,12 @@ contract TokenDistributionTest is Test {
         uint8 usageType
     );
     event DistributedWithAuth(
-        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount, uint8 usageType
+        bytes32 indexed uuid,
+        address indexed signer,
+        uint256 batchId,
+        uint256 recipientCount,
+        uint256 batchAmount,
+        uint8 usageType
     );
     event TransferSkipped(address indexed recipient, uint256 value, bytes reason);
     event Refunded(address indexed to, uint256 amount);
@@ -130,8 +135,8 @@ contract TokenDistributionTest is Test {
     function setUp() public {
         // Deploy mock premium contract at the expected address
         mockPremium = new MockBiuBiuPremium();
-        vm.etch(0xc5c4bb399938625523250B708dc5c1e7dE4b1626, address(mockPremium).code);
-        mockPremium = MockBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+        vm.etch(0x61Ae52Bb677847853DB30091ccc32d9b68878B71, address(mockPremium).code);
+        mockPremium = MockBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
 
         // Deploy WETH at expected address
         weth = new WETH();

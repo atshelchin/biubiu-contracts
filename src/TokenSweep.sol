@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+/**
+ * @title TokenSweep
+ * @notice Batch sweep tokens from multiple wallets to a single recipient
+ * @dev Part of BiuBiu Tools - https://biubiu.tools
+ */
+
 interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
 
@@ -25,7 +31,7 @@ struct Wallet {
 }
 
 contract TokenSweep {
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
 
@@ -39,8 +45,8 @@ contract TokenSweep {
     uint256 public totalPremiumUsage;
     uint256 public totalPaidUsage;
 
-    // Reentrancy guard
-    uint256 private _locked = 0;
+    // Reentrancy guard (1 = unlocked, 2 = locked)
+    uint256 private _locked = 1;
 
     // Custom errors (gas efficient)
     error ReentrancyDetected();
@@ -210,12 +216,12 @@ contract TokenSweep {
     }
 
     function _nonReentrantBefore() private {
-        if (_locked == 1) revert ReentrancyDetected();
-        _locked = 1;
+        if (_locked != 1) revert ReentrancyDetected();
+        _locked = 2;
     }
 
     function _nonReentrantAfter() private {
-        _locked = 0;
+        _locked = 1;
     }
 
     /**
@@ -240,6 +246,11 @@ contract TokenSweep {
             r := calldataload(signature.offset)
             s := calldataload(add(signature.offset, 32))
             v := byte(0, calldataload(add(signature.offset, 64)))
+        }
+
+        // Check s value to prevent signature malleability (EIP-2)
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
+            revert InvalidSignature();
         }
 
         // Construct human-readable message for signature

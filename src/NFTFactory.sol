@@ -9,253 +9,13 @@ interface IBiuBiuPremium {
 }
 
 /**
- * @title IERC20
- * @notice Minimal ERC20 interface for staking
- */
-interface IERC20 {
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    function transfer(address to, uint256 amount) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-}
-
-/**
- * @title SimpleERC721
- * @notice ERC721 NFT with stake-to-mint mechanism
- */
-contract SimpleERC721 {
-    string public name;
-    string public symbol;
-    string public baseURI;
-
-    uint256 public totalSupply;
-    uint256 public nextTokenId;
-
-    address public owner;
-    bool public publicMintEnabled;
-
-    // Stake-to-mint settings
-    bool public stakeToMintEnabled;
-    address public stakeToken; // ERC20 token required for minting
-    uint256 public stakeAmount; // Amount of tokens to stake per NFT
-
-    mapping(uint256 => address) public ownerOf;
-    mapping(address => uint256) public balanceOf;
-    mapping(uint256 => address) public getApproved;
-    mapping(address => mapping(address => bool)) public isApprovedForAll;
-
-    // Stake tracking: tokenId => staked amount
-    mapping(uint256 => uint256) public stakedAmount;
-
-    // Reentrancy guard
-    uint256 private locked = 1;
-
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-    event Staked(uint256 indexed tokenId, uint256 amount);
-    event Redeemed(uint256 indexed tokenId, uint256 amount);
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
-        _;
-    }
-
-    modifier nonReentrant() {
-        require(locked == 1, "Reentrancy detected");
-        locked = 2;
-        _;
-        locked = 1;
-    }
-
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        string memory _baseURI,
-        address _owner,
-        bool _publicMintEnabled,
-        bool _stakeToMintEnabled,
-        address _stakeToken,
-        uint256 _stakeAmount
-    ) {
-        name = _name;
-        symbol = _symbol;
-        baseURI = _baseURI;
-        owner = _owner;
-        publicMintEnabled = _publicMintEnabled;
-        stakeToMintEnabled = _stakeToMintEnabled;
-        stakeToken = _stakeToken;
-        stakeAmount = _stakeAmount;
-    }
-
-    function tokenURI(uint256 tokenId) public view returns (string memory) {
-        require(ownerOf[tokenId] != address(0), "Token does not exist");
-        return string(abi.encodePacked(baseURI, _toString(tokenId)));
-    }
-
-    function approve(address spender, uint256 tokenId) public {
-        address tokenOwner = ownerOf[tokenId];
-        require(msg.sender == tokenOwner || isApprovedForAll[tokenOwner][msg.sender], "Not authorized");
-        getApproved[tokenId] = spender;
-        emit Approval(tokenOwner, spender, tokenId);
-    }
-
-    function setApprovalForAll(address operator, bool approved) public {
-        isApprovedForAll[msg.sender][operator] = approved;
-        emit ApprovalForAll(msg.sender, operator, approved);
-    }
-
-    function transferFrom(address from, address to, uint256 tokenId) public {
-        require(from == ownerOf[tokenId], "Wrong from");
-        require(to != address(0), "Invalid recipient");
-        require(
-            msg.sender == from || msg.sender == getApproved[tokenId] || isApprovedForAll[from][msg.sender],
-            "Not authorized"
-        );
-
-        balanceOf[from]--;
-        balanceOf[to]++;
-        ownerOf[tokenId] = to;
-        delete getApproved[tokenId];
-
-        emit Transfer(from, to, tokenId);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) public {
-        transferFrom(from, to, tokenId);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory) public {
-        transferFrom(from, to, tokenId);
-    }
-
-    /**
-     * @notice Mint NFT by owner (traditional way)
-     */
-    function mint(address to) public onlyOwner returns (uint256) {
-        require(!stakeToMintEnabled, "Stake-to-mint is enabled");
-        return _mint(to, 0);
-    }
-
-    /**
-     * @notice Mint NFT by staking ERC20 tokens
-     */
-    function stakeToMint() public nonReentrant returns (uint256) {
-        require(stakeToMintEnabled, "Stake-to-mint not enabled");
-        require(publicMintEnabled || msg.sender == owner, "Public mint disabled");
-        require(stakeToken != address(0), "Stake token not set");
-        require(stakeAmount > 0, "Stake amount not set");
-
-        // Transfer stake tokens from user to this contract (CEI pattern)
-        _safeTransferFrom(stakeToken, msg.sender, address(this), stakeAmount);
-
-        uint256 tokenId = _mint(msg.sender, stakeAmount);
-
-        emit Staked(tokenId, stakeAmount);
-        return tokenId;
-    }
-
-    /**
-     * @notice Burn NFT and redeem staked tokens
-     */
-    function burnToRedeem(uint256 tokenId) public nonReentrant {
-        require(ownerOf[tokenId] == msg.sender, "Not token owner");
-        require(stakedAmount[tokenId] > 0, "No staked amount");
-
-        uint256 redeemAmount = stakedAmount[tokenId];
-        address tokenOwner = msg.sender;
-
-        // Check contract has enough balance
-        require(IERC20(stakeToken).balanceOf(address(this)) >= redeemAmount, "Insufficient contract balance");
-
-        // Burn NFT (CEI pattern - effects before interaction)
-        balanceOf[tokenOwner]--;
-        delete ownerOf[tokenId];
-        delete stakedAmount[tokenId];
-        totalSupply--;
-
-        emit Transfer(tokenOwner, address(0), tokenId);
-
-        // Return staked tokens (interaction last)
-        _safeTransfer(stakeToken, tokenOwner, redeemAmount);
-
-        emit Redeemed(tokenId, redeemAmount);
-    }
-
-    function _mint(address to, uint256 stakedAmt) internal returns (uint256) {
-        require(to != address(0), "Invalid recipient");
-
-        uint256 tokenId = nextTokenId++;
-        ownerOf[tokenId] = to;
-        balanceOf[to]++;
-        totalSupply++;
-
-        if (stakedAmt > 0) {
-            stakedAmount[tokenId] = stakedAmt;
-        }
-
-        emit Transfer(address(0), to, tokenId);
-        return tokenId;
-    }
-
-    function _toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits--;
-            buffer[digits] = bytes1(uint8(48 + (value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
-
-    /**
-     * @notice Check if a token can be redeemed
-     */
-    function canRedeem(uint256 tokenId) public view returns (bool) {
-        return stakedAmount[tokenId] > 0 && ownerOf[tokenId] != address(0);
-    }
-
-    /**
-     * @notice Get redeemable amount for a token
-     */
-    function getRedeemableAmount(uint256 tokenId) public view returns (uint256) {
-        return stakedAmount[tokenId];
-    }
-
-    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
-        return interfaceId == 0x80ac58cd || interfaceId == 0x5b5e139f || interfaceId == 0x01ffc9a7;
-    }
-
-    /**
-     * @notice Safe ERC20 transfer (handles non-standard tokens like USDT)
-     */
-    function _safeTransfer(address token, address to, uint256 amount) private {
-        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, amount));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), "Transfer failed");
-    }
-
-    /**
-     * @notice Safe ERC20 transferFrom (handles non-standard tokens like USDT)
-     */
-    function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
-        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd, from, to, amount));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), "TransferFrom failed");
-    }
-}
-
-/**
  * @title NFTFactory
- * @notice Factory to deploy ERC721 NFTs with CREATE2
+ * @notice Factory to deploy ERC721 NFT collections with CREATE2
+ * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract NFTFactory {
     // Constants
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
 
@@ -264,22 +24,26 @@ contract NFTFactory {
     uint8 public constant USAGE_PREMIUM = 1;
     uint8 public constant USAGE_PAID = 2;
 
+    // Reentrancy guard (1 = unlocked, 2 = locked)
+    uint256 private _locked = 1;
+
     // Statistics
     uint256 public totalFreeUsage;
     uint256 public totalPremiumUsage;
     uint256 public totalPaidUsage;
 
-    struct NFTInfo {
-        address nftAddress;
-        string name;
-        string symbol;
-        address creator;
-        bool stakeToMintEnabled;
-        address stakeToken;
-    }
-
     // Errors
     error InsufficientPayment();
+    error NameEmpty();
+    error SymbolEmpty();
+    error ReentrancyDetected();
+
+    modifier nonReentrant() {
+        if (_locked != 1) revert ReentrancyDetected();
+        _locked = 2;
+        _;
+        _locked = 1;
+    }
 
     // Events
     event NFTCreated(
@@ -287,8 +51,7 @@ contract NFTFactory {
         address indexed creator,
         string name,
         string symbol,
-        bool stakeToMintEnabled,
-        address stakeToken,
+        string description,
         uint8 usageType
     );
     event ReferralPaid(address indexed referrer, address indexed payer, uint256 amount);
@@ -298,39 +61,41 @@ contract NFTFactory {
     mapping(address => address[]) public userNFTs;
 
     /**
-     * @notice Create ERC721 NFT (paid version)
+     * @notice Create ERC721 NFT Collection (paid version)
+     * @param name Collection name
+     * @param symbol Collection symbol
+     * @param description Collection description
+     * @param baseImageURI Base URI for token images
      * @param referrer Referrer address for fee sharing
      */
     function createERC721(
         string memory name,
         string memory symbol,
-        string memory baseURI,
-        bool publicMintEnabled,
-        bool stakeToMintEnabled,
-        address stakeToken,
-        uint256 stakeAmount,
+        string memory description,
+        string memory baseImageURI,
         address referrer
-    ) external payable returns (address) {
+    ) external payable nonReentrant returns (address) {
         // Check premium status and collect fee
         uint8 usageType = _checkAndCollectFee(referrer);
 
-        return _createERC721(name, symbol, baseURI, publicMintEnabled, stakeToMintEnabled, stakeToken, stakeAmount, usageType);
+        return _createERC721(name, symbol, description, baseImageURI, usageType);
     }
 
     /**
-     * @notice Create ERC721 NFT (free version)
+     * @notice Create ERC721 NFT Collection (free version)
+     * @param name Collection name
+     * @param symbol Collection symbol
+     * @param description Collection description
+     * @param baseImageURI Base URI for token images
      */
     function createERC721Free(
         string memory name,
         string memory symbol,
-        string memory baseURI,
-        bool publicMintEnabled,
-        bool stakeToMintEnabled,
-        address stakeToken,
-        uint256 stakeAmount
-    ) external returns (address) {
+        string memory description,
+        string memory baseImageURI
+    ) external nonReentrant returns (address) {
         totalFreeUsage++;
-        return _createERC721(name, symbol, baseURI, publicMintEnabled, stakeToMintEnabled, stakeToken, stakeAmount, USAGE_FREE);
+        return _createERC721(name, symbol, description, baseImageURI, USAGE_FREE);
     }
 
     /**
@@ -339,32 +104,22 @@ contract NFTFactory {
     function _createERC721(
         string memory name,
         string memory symbol,
-        string memory baseURI,
-        bool publicMintEnabled,
-        bool stakeToMintEnabled,
-        address stakeToken,
-        uint256 stakeAmount,
+        string memory description,
+        string memory baseImageURI,
         uint8 usageType
     ) internal returns (address) {
-        require(bytes(name).length > 0, "Name empty");
-        require(bytes(symbol).length > 0, "Symbol empty");
+        if (bytes(name).length == 0) revert NameEmpty();
+        if (bytes(symbol).length == 0) revert SymbolEmpty();
 
-        if (stakeToMintEnabled) {
-            require(stakeToken != address(0), "Stake token required");
-            require(stakeAmount > 0, "Stake amount required");
-        }
+        bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, baseImageURI));
 
-        bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, baseURI, stakeToken, stakeAmount));
-
-        SimpleERC721 nft = new SimpleERC721{salt: salt}(
-            name, symbol, baseURI, msg.sender, publicMintEnabled, stakeToMintEnabled, stakeToken, stakeAmount
-        );
+        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, baseImageURI, msg.sender);
 
         address nftAddress = address(nft);
         allNFTs.push(nftAddress);
         userNFTs[msg.sender].push(nftAddress);
 
-        emit NFTCreated(nftAddress, msg.sender, name, symbol, stakeToMintEnabled, stakeToken, usageType);
+        emit NFTCreated(nftAddress, msg.sender, name, symbol, description, usageType);
 
         return nftAddress;
     }
@@ -406,22 +161,7 @@ contract NFTFactory {
         return USAGE_PAID;
     }
 
-    /**
-     * @notice Get NFT info from NFT address
-     * @param nftAddress NFT contract address
-     * @return info NFTInfo struct with all NFT details
-     */
-    function getNFTInfo(address nftAddress) public view returns (NFTInfo memory info) {
-        SimpleERC721 nft = SimpleERC721(nftAddress);
-        info = NFTInfo({
-            nftAddress: nftAddress,
-            name: nft.name(),
-            symbol: nft.symbol(),
-            creator: nft.owner(),
-            stakeToMintEnabled: nft.stakeToMintEnabled(),
-            stakeToken: nft.stakeToken()
-        });
-    }
+    // ============ Query Functions ============
 
     /**
      * @notice Get total number of NFTs created
@@ -452,122 +192,271 @@ contract NFTFactory {
     }
 
     /**
-     * @notice Get user NFTs with pagination (addresses only)
-     * @param user User address
-     * @param offset Starting index
-     * @param limit Maximum number of NFTs to return
-     * @return nfts Array of NFT addresses
-     * @return total Total number of NFTs for this user
+     * @notice Get user NFTs with pagination
      */
     function getUserNFTsPaginated(address user, uint256 offset, uint256 limit)
         external
         view
         returns (address[] memory nfts, uint256 total)
     {
-        total = userNFTs[user].length;
-
-        if (offset >= total) {
-            return (new address[](0), total);
-        }
-
-        uint256 end = offset + limit;
-        if (end > total) {
-            end = total;
-        }
-
-        uint256 size = end - offset;
-        nfts = new address[](size);
-
-        for (uint256 i = 0; i < size; i++) {
-            nfts[i] = userNFTs[user][offset + i];
-        }
-
-        return (nfts, total);
+        return _paginate(userNFTs[user], offset, limit);
     }
 
     /**
-     * @notice Get user NFTs with pagination (with full NFT info)
-     * @param user User address
-     * @param offset Starting index
-     * @param limit Maximum number of NFTs to return
-     * @return nftInfos Array of NFTInfo structs
-     * @return total Total number of NFTs for this user
-     */
-    function getUserNFTsInfoPaginated(address user, uint256 offset, uint256 limit)
-        external
-        view
-        returns (NFTInfo[] memory nftInfos, uint256 total)
-    {
-        total = userNFTs[user].length;
-
-        if (offset >= total) {
-            return (new NFTInfo[](0), total);
-        }
-
-        uint256 end = offset + limit;
-        if (end > total) {
-            end = total;
-        }
-
-        uint256 size = end - offset;
-        nftInfos = new NFTInfo[](size);
-
-        for (uint256 i = 0; i < size; i++) {
-            nftInfos[i] = getNFTInfo(userNFTs[user][offset + i]);
-        }
-
-        return (nftInfos, total);
-    }
-
-    /**
-     * @notice Get all NFTs with pagination (addresses only)
-     * @param offset Starting index
-     * @param limit Maximum number of NFTs to return
-     * @return nfts Array of NFT addresses
-     * @return total Total number of NFTs
+     * @notice Get all NFTs with pagination
      */
     function getAllNFTsPaginated(uint256 offset, uint256 limit)
         external
         view
         returns (address[] memory nfts, uint256 total)
     {
-        total = allNFTs.length;
+        return _paginate(allNFTs, offset, limit);
+    }
 
-        if (offset >= total) {
-            return (new address[](0), total);
-        }
+    function _paginate(address[] storage arr, uint256 offset, uint256 limit)
+        internal
+        view
+        returns (address[] memory nfts, uint256 total)
+    {
+        total = arr.length;
+        if (offset >= total) return (new address[](0), total);
 
         uint256 end = offset + limit;
-        if (end > total) {
-            end = total;
-        }
+        if (end > total) end = total;
 
         uint256 size = end - offset;
         nfts = new address[](size);
-
-        for (uint256 i = 0; i < size; i++) {
-            nfts[i] = allNFTs[offset + i];
+        for (uint256 i; i < size;) {
+            nfts[i] = arr[offset + i];
+            unchecked {
+                ++i;
+            }
         }
+    }
+}
 
-        return (nfts, total);
+interface IERC721Receiver {
+    function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data)
+        external
+        returns (bytes4);
+}
+
+/**
+ * @title SocialNFT
+ * @notice ERC721 NFT with random traits and social features
+ * @dev Each transfer creates a "drift" record, recipients can leave messages
+ * @dev Part of BiuBiu Tools - https://biubiu.tools
+ */
+contract SocialNFT {
+    // Collection info
+    string public name;
+    string public symbol;
+    string public collectionDescription;
+    string public baseImageURI;
+
+    uint256 public totalSupply;
+    uint256 public nextTokenId;
+    address public owner;
+
+    // Rarity constants
+    uint8 public constant RARITY_COMMON = 0; // 60%
+    uint8 public constant RARITY_UNCOMMON = 1; // 25%
+    uint8 public constant RARITY_RARE = 2; // 10%
+    uint8 public constant RARITY_LEGENDARY = 3; // 4%
+    uint8 public constant RARITY_MYTHIC = 4; // 1%
+
+    // Token metadata
+    struct TokenData {
+        string name;
+        string description;
+        string image;
+        uint256 createdAt;
+    }
+
+    // Token traits (randomly generated)
+    struct TokenTraits {
+        uint8 rarity;
+        uint8 background; // 0-9
+        uint8 pattern; // 0-9
+        uint8 glow; // 0-9
+        uint256 luckyNumber; // 0-9999
+    }
+
+    // Drift message (transfer history)
+    struct DriftMessage {
+        address from;
+        string message;
+        uint256 timestamp;
+    }
+
+    // ERC721 storage
+    mapping(uint256 => address) public ownerOf;
+    mapping(address => uint256) public balanceOf;
+    mapping(uint256 => address) public getApproved;
+    mapping(address => mapping(address => bool)) public isApprovedForAll;
+
+    // Metadata storage
+    mapping(uint256 => TokenData) public tokenData;
+    mapping(uint256 => TokenTraits) public tokenTraits;
+    mapping(uint256 => DriftMessage[]) internal _driftHistory;
+
+    // Events
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+    event Minted(uint256 indexed tokenId, address indexed to, uint8 rarity, uint256 luckyNumber);
+    event Drifted(uint256 indexed tokenId, address indexed from, address indexed to);
+    event MessageLeft(uint256 indexed tokenId, address indexed by, string message);
+
+    // Errors
+    error NotOwner();
+    error NotTokenOwner();
+    error InvalidRecipient();
+    error TokenNotExist();
+    error NotAuthorized();
+    error AlreadyLeftMessage();
+    error NoDriftHistory();
+    error TransferToNonReceiver();
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        string memory _collectionDescription,
+        string memory _baseImageURI,
+        address _owner
+    ) {
+        name = _name;
+        symbol = _symbol;
+        collectionDescription = _collectionDescription;
+        baseImageURI = _baseImageURI;
+        owner = _owner;
+    }
+
+    // ============ Mint Functions ============
+
+    /**
+     * @notice Mint NFT with custom metadata (only owner)
+     * @param to Recipient address
+     * @param _name Token name
+     * @param _description Token description
+     * @param _image Token image URI (IPFS or HTTPS)
+     */
+    function mint(address to, string calldata _name, string calldata _description, string calldata _image)
+        public
+        onlyOwner
+        returns (uint256)
+    {
+        if (to == address(0)) revert InvalidRecipient();
+
+        uint256 tokenId = nextTokenId++;
+        ownerOf[tokenId] = to;
+        balanceOf[to]++;
+        totalSupply++;
+
+        // Set metadata
+        tokenData[tokenId] =
+            TokenData({name: _name, description: _description, image: _image, createdAt: block.timestamp});
+
+        // Generate random traits
+        tokenTraits[tokenId] = _generateTraits(tokenId);
+
+        emit Transfer(address(0), to, tokenId);
+        emit Minted(tokenId, to, tokenTraits[tokenId].rarity, tokenTraits[tokenId].luckyNumber);
+
+        return tokenId;
     }
 
     /**
-     * @notice Get all NFTs with pagination (with full NFT info)
-     * @param offset Starting index
-     * @param limit Maximum number of NFTs to return
-     * @return nftInfos Array of NFTInfo structs
-     * @return total Total number of NFTs
+     * @notice Mint NFT with default image from baseImageURI
+     * @param to Recipient address
+     * @param _name Token name
+     * @param _description Token description
      */
-    function getAllNFTsInfoPaginated(uint256 offset, uint256 limit)
-        external
-        view
-        returns (NFTInfo[] memory nftInfos, uint256 total)
+    function mintWithBaseURI(address to, string calldata _name, string calldata _description)
+        public
+        onlyOwner
+        returns (uint256)
     {
-        total = allNFTs.length;
+        if (to == address(0)) revert InvalidRecipient();
+
+        uint256 tokenId = nextTokenId++;
+        ownerOf[tokenId] = to;
+        balanceOf[to]++;
+        totalSupply++;
+
+        // Set metadata with empty image (will use baseImageURI)
+        tokenData[tokenId] = TokenData({name: _name, description: _description, image: "", createdAt: block.timestamp});
+
+        // Generate random traits
+        tokenTraits[tokenId] = _generateTraits(tokenId);
+
+        emit Transfer(address(0), to, tokenId);
+        emit Minted(tokenId, to, tokenTraits[tokenId].rarity, tokenTraits[tokenId].luckyNumber);
+
+        return tokenId;
+    }
+
+    // ============ Drift (Transfer Message) System ============
+
+    /**
+     * @notice Leave a message after receiving an NFT
+     * @param tokenId Token ID
+     * @param message Your message
+     */
+    function leaveMessage(uint256 tokenId, string calldata message) public {
+        if (ownerOf[tokenId] != msg.sender) revert NotTokenOwner();
+
+        uint256 len = _driftHistory[tokenId].length;
+        if (len == 0) revert NoDriftHistory();
+
+        DriftMessage storage lastDrift = _driftHistory[tokenId][len - 1];
+        if (bytes(lastDrift.message).length > 0) revert AlreadyLeftMessage();
+
+        lastDrift.message = message;
+
+        emit MessageLeft(tokenId, msg.sender, message);
+    }
+
+    /**
+     * @notice Get drift history for a token
+     * @param tokenId Token ID
+     * @return Array of drift messages
+     */
+    function getDriftHistory(uint256 tokenId) public view returns (DriftMessage[] memory) {
+        return _driftHistory[tokenId];
+    }
+
+    /**
+     * @notice Get drift count for a token
+     * @param tokenId Token ID
+     * @return Number of times the token has been transferred
+     */
+    function getDriftCount(uint256 tokenId) public view returns (uint256) {
+        return _driftHistory[tokenId].length;
+    }
+
+    /**
+     * @notice Get drift history with pagination
+     * @param tokenId Token ID
+     * @param offset Starting index
+     * @param limit Maximum number of records to return
+     * @return messages Array of drift messages
+     * @return total Total number of drift records for this token
+     */
+    function getDriftHistoryPaginated(uint256 tokenId, uint256 offset, uint256 limit)
+        public
+        view
+        returns (DriftMessage[] memory messages, uint256 total)
+    {
+        total = _driftHistory[tokenId].length;
 
         if (offset >= total) {
-            return (new NFTInfo[](0), total);
+            return (new DriftMessage[](0), total);
         }
 
         uint256 end = offset + limit;
@@ -576,12 +465,173 @@ contract NFTFactory {
         }
 
         uint256 size = end - offset;
-        nftInfos = new NFTInfo[](size);
+        messages = new DriftMessage[](size);
 
         for (uint256 i = 0; i < size; i++) {
-            nftInfos[i] = getNFTInfo(allNFTs[offset + i]);
+            messages[i] = _driftHistory[tokenId][offset + i];
         }
 
-        return (nftInfos, total);
+        return (messages, total);
+    }
+
+    // ============ ERC721 Functions ============
+
+    function approve(address spender, uint256 tokenId) public {
+        address tokenOwner = ownerOf[tokenId];
+        if (msg.sender != tokenOwner && !isApprovedForAll[tokenOwner][msg.sender]) {
+            revert NotAuthorized();
+        }
+        getApproved[tokenId] = spender;
+        emit Approval(tokenOwner, spender, tokenId);
+    }
+
+    function setApprovalForAll(address operator, bool approved) public {
+        isApprovedForAll[msg.sender][operator] = approved;
+        emit ApprovalForAll(msg.sender, operator, approved);
+    }
+
+    function transferFrom(address from, address to, uint256 tokenId) public {
+        if (from != ownerOf[tokenId]) revert NotTokenOwner();
+        if (to == address(0)) revert InvalidRecipient();
+        if (msg.sender != from && msg.sender != getApproved[tokenId] && !isApprovedForAll[from][msg.sender]) {
+            revert NotAuthorized();
+        }
+
+        balanceOf[from]--;
+        balanceOf[to]++;
+        ownerOf[tokenId] = to;
+        delete getApproved[tokenId];
+
+        // Record drift (transfer)
+        _driftHistory[tokenId].push(DriftMessage({from: from, message: "", timestamp: block.timestamp}));
+
+        emit Transfer(from, to, tokenId);
+        emit Drifted(tokenId, from, to);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) public {
+        transferFrom(from, to, tokenId);
+        _checkOnERC721Received(from, to, tokenId, "");
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public {
+        transferFrom(from, to, tokenId);
+        _checkOnERC721Received(from, to, tokenId, data);
+    }
+
+    function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory data) private {
+        if (to.code.length > 0) {
+            try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 retval) {
+                if (retval != IERC721Receiver.onERC721Received.selector) {
+                    revert TransferToNonReceiver();
+                }
+            } catch {
+                revert TransferToNonReceiver();
+            }
+        }
+    }
+
+    // ============ Metadata Functions ============
+
+    /**
+     * @notice Get token URI (returns baseImageURI + tokenId or custom image)
+     * @param tokenId Token ID
+     * @return Token URI string
+     */
+    function tokenURI(uint256 tokenId) public view returns (string memory) {
+        if (ownerOf[tokenId] == address(0)) revert TokenNotExist();
+
+        TokenData memory data = tokenData[tokenId];
+
+        // Return custom image if set, otherwise baseImageURI + tokenId
+        if (bytes(data.image).length > 0) {
+            return data.image;
+        }
+        return string(abi.encodePacked(baseImageURI, _toString(tokenId)));
+    }
+
+    /**
+     * @notice Get token traits
+     * @param tokenId Token ID
+     */
+    function getTokenTraits(uint256 tokenId)
+        public
+        view
+        returns (uint8 rarity, uint8 background, uint8 pattern, uint8 glow, uint256 luckyNumber)
+    {
+        TokenTraits memory traits = tokenTraits[tokenId];
+        return (traits.rarity, traits.background, traits.pattern, traits.glow, traits.luckyNumber);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
+        return
+            interfaceId == 0x80ac58cd // ERC721
+                || interfaceId == 0x5b5e139f // ERC721Metadata
+                || interfaceId == 0x01ffc9a7; // ERC165
+    }
+
+    // ============ Internal Functions ============
+
+    function _generateTraits(uint256 tokenId) internal view returns (TokenTraits memory) {
+        // Enhanced entropy: add historical block hashes for better randomness
+        // Use safe block hash retrieval to avoid underflow on early blocks
+        bytes32 hash1 = block.number > 0 ? blockhash(block.number - 1) : bytes32(0);
+        bytes32 hash2 = block.number > 1 ? blockhash(block.number - 2) : bytes32(0);
+
+        uint256 seed = uint256(
+            keccak256(
+                abi.encodePacked(
+                    block.timestamp, block.prevrandao, hash1, hash2, msg.sender, tokenId, totalSupply, address(this)
+                )
+            )
+        );
+
+        // Rarity distribution
+        uint8 rarity;
+        uint256 roll = seed % 100;
+        if (roll < 1) {
+            rarity = RARITY_MYTHIC;
+        }
+        // 1%
+        else if (roll < 5) {
+            rarity = RARITY_LEGENDARY;
+        }
+        // 4%
+        else if (roll < 15) {
+            rarity = RARITY_RARE;
+        }
+        // 10%
+        else if (roll < 40) {
+            rarity = RARITY_UNCOMMON;
+        }
+        // 25%
+        else {
+            rarity = RARITY_COMMON;
+        } // 60%
+
+        return TokenTraits({
+            rarity: rarity,
+            background: uint8((seed >> 8) % 10),
+            pattern: uint8((seed >> 16) % 10),
+            glow: uint8((seed >> 24) % 10),
+            luckyNumber: (seed >> 32) % 10000
+        });
+    }
+
+    function _toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits--;
+            buffer[digits] = bytes1(uint8(48 + (value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
     }
 }

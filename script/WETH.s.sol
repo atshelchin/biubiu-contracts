@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {NFTFactory} from "../src/NFTFactory.sol";
+import {WETH} from "../src/WETH.sol";
 
-contract NFTFactoryScript is Script {
+contract WETHScript is Script {
     // CREATE2 Deterministic deployment proxy
     address constant CREATE2_PROXY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
@@ -14,18 +14,19 @@ contract NFTFactoryScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Get contract bytecode
-        bytes memory bytecode = type(NFTFactory).creationCode;
+        bytes memory bytecode = type(WETH).creationCode;
 
         // Salt for deterministic address (can be changed)
         bytes32 salt = bytes32(uint256(0));
 
         // Deploy via CREATE2 proxy
-        NFTFactory nftFactory = NFTFactory(deployViaCreate2Proxy(bytecode, salt));
+        WETH weth = WETH(payable(deployViaCreate2Proxy(bytecode, salt)));
 
-        console.log("=== NFTFactory Deployment ===");
-        console.log("NFTFactory deployed at:", address(nftFactory));
-        console.log("Total NFTs created:", nftFactory.allNFTsLength());
-        console.log("==============================");
+        console.log("=== WETH Deployment ===");
+        console.log("WETH deployed at:", address(weth));
+        console.log("Name:", weth.name());
+        console.log("Symbol:", weth.symbol());
+        console.log("=======================");
 
         vm.stopBroadcast();
     }
@@ -62,23 +63,23 @@ contract NFTFactoryScript is Script {
 
     /// @notice Get the deterministic deployment address without deploying
     function getDeploymentAddress() external pure returns (address) {
-        bytes memory bytecode = type(NFTFactory).creationCode;
+        bytes memory bytecode = type(WETH).creationCode;
         bytes32 salt = bytes32(uint256(0));
         return computeCreate2Address(bytecode, salt);
     }
 
     /// @notice Get the deterministic deployment address with custom salt
     function getDeploymentAddress(bytes32 salt) external pure returns (address) {
-        bytes memory bytecode = type(NFTFactory).creationCode;
+        bytes memory bytecode = type(WETH).creationCode;
         return computeCreate2Address(bytecode, salt);
     }
 
     /// @notice Print the deterministic deployment address (for CLI use)
     function printAddress() external pure {
-        bytes memory bytecode = type(NFTFactory).creationCode;
+        bytes memory bytecode = type(WETH).creationCode;
         bytes32 salt = bytes32(uint256(0));
         address predicted = computeCreate2Address(bytecode, salt);
-        console.log("NFTFactory deterministic address:", predicted);
+        console.log("WETH deterministic address:", predicted);
         console.log("Salt:", uint256(salt));
         console.log("Bytecode hash:", uint256(keccak256(bytecode)));
     }

@@ -11,6 +11,7 @@ interface IBiuBiuPremium {
 /**
  * @title SimpleToken
  * @notice A simple ERC20 token with optional minting capability
+ * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract SimpleToken {
     string public name;
@@ -109,10 +110,11 @@ contract SimpleToken {
 /**
  * @title TokenFactory
  * @notice Factory contract to deploy custom ERC20 tokens
+ * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract TokenFactory {
     // Constants
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
 

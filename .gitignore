@@ -13,3 +13,6 @@ docs/
 # Dotenv file
 .env
 .claude/settings.local.json
+
+lcov.info
+preview

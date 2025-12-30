@@ -28,9 +28,10 @@ interface IBiuBiuPremium {
 /// @title TokenDistribution
 /// @notice Batch distribute ETH, ERC20, ERC721, ERC1155 tokens to multiple recipients
 /// @dev Supports self-execute and delegated execute modes with Merkle tree verification
+/// @dev Part of BiuBiu Tools - https://biubiu.tools
 contract TokenDistribution {
     // Constants
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
     IWETH public constant WETH = IWETH(0xe3E75C1fe9AE82993FEb6F9CA2e9627aaE1e3d18);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     uint256 public constant MAX_BATCH_SIZE = 100;
@@ -63,8 +64,8 @@ contract TokenDistribution {
     );
     bytes32 public immutable DOMAIN_SEPARATOR;
 
-    // Reentrancy guard
-    uint256 private _locked = 0;
+    // Reentrancy guard (1 = unlocked, 2 = locked)
+    uint256 private _locked = 1;
 
     // Storage for delegated execute
     mapping(bytes32 uuid => mapping(uint256 batchId => bool)) public batchExecuted;
@@ -122,7 +123,12 @@ contract TokenDistribution {
         uint8 usageType
     );
     event DistributedWithAuth(
-        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount, uint8 usageType
+        bytes32 indexed uuid,
+        address indexed signer,
+        uint256 batchId,
+        uint256 recipientCount,
+        uint256 batchAmount,
+        uint8 usageType
     );
     event TransferSkipped(address indexed recipient, uint256 value, bytes reason);
     event Refunded(address indexed to, uint256 amount);
@@ -136,10 +142,10 @@ contract TokenDistribution {
     }
 
     modifier nonReentrant() {
-        if (_locked == 1) revert ReentrancyDetected();
-        _locked = 1;
+        if (_locked != 1) revert ReentrancyDetected();
+        _locked = 2;
         _;
-        _locked = 0;
+        _locked = 1;
     }
 
     /// @notice Self-execute distribution (owner sends transaction) - paid version
@@ -179,12 +185,12 @@ contract TokenDistribution {
     /// @param recipients List of recipients (max 100)
     /// @return totalDistributed Total amount successfully distributed
     /// @return failed Array of failed transfers with details (address, value, reason)
-    function distributeFree(
-        address token,
-        uint8 tokenType,
-        uint256 tokenId,
-        Recipient[] calldata recipients
-    ) external payable nonReentrant returns (uint256 totalDistributed, FailedTransfer[] memory failed) {
+    function distributeFree(address token, uint8 tokenType, uint256 tokenId, Recipient[] calldata recipients)
+        external
+        payable
+        nonReentrant
+        returns (uint256 totalDistributed, FailedTransfer[] memory failed)
+    {
         uint256 len = recipients.length;
         if (len == 0 || len > MAX_BATCH_SIZE) revert BatchTooLarge();
 
@@ -222,7 +228,10 @@ contract TokenDistribution {
     }
 
     /// @dev Check premium status and collect fee for distribute
-    function _checkAndCollectFeeForDistribute(uint256 msgValue, address referrer) internal returns (uint8 usageType, uint256 availableETH) {
+    function _checkAndCollectFeeForDistribute(uint256 msgValue, address referrer)
+        internal
+        returns (uint8 usageType, uint256 availableETH)
+    {
         (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
 
         availableETH = msgValue;
@@ -268,7 +277,8 @@ contract TokenDistribution {
         uint8 usageType = _checkPremiumAndCollectFeeForAuth(signer, referrer);
 
         // Execute distribution with auth
-        (batchAmount, failed) = _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, usageType);
+        (batchAmount, failed) =
+            _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, usageType);
     }
 
     /// @notice Delegated execute distribution (free version)
@@ -294,7 +304,8 @@ contract TokenDistribution {
         totalFreeAuthUsage++;
 
         // Execute distribution with auth
-        (batchAmount, failed) = _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, USAGE_FREE);
+        (batchAmount, failed) =
+            _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, USAGE_FREE);
     }
 
     /// @dev Validate inputs and verify signature
@@ -362,7 +373,6 @@ contract TokenDistribution {
         if (batchExecuted[auth.uuid][batchId]) revert BatchAlreadyExecuted();
         if (proofLengthsLen != recipientsLen) revert InvalidProof();
     }
-
 
     function _updateBatchState(bytes32 uuid, uint256 batchId, uint256 _totalBatches) internal {
         batchExecuted[uuid][batchId] = true;

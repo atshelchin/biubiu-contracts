@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
  * @title WETH with Approve on Deposit
  * @notice Wrapped ETH contract with additional functionality to approve spender during deposit
  * @dev Implements ERC20 standard with depositAndApprove function
+ * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract WETH {
     string public name = "Wrapped Ether";

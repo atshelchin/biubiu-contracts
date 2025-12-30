@@ -2,514 +2,676 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {NFTFactory, SimpleERC721} from "../src/NFTFactory.sol";
-
-// Mock ERC20 for testing
-contract MockERC20 {
-    string public name = "Mock Token";
-    string public symbol = "MOCK";
-    uint8 public decimals = 18;
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-    }
-
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        return true;
-    }
-
-    function transfer(address to, uint256 amount) external returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[to] += amount;
-        return true;
-    }
-
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        allowance[from][msg.sender] -= amount;
-        return true;
-    }
-}
+import {NFTFactory, SocialNFT} from "../src/NFTFactory.sol";
 
 contract NFTFactoryTest is Test {
     NFTFactory public factory;
-    MockERC20 public memeToken;
 
     address public alice = address(0x1);
     address public bob = address(0x2);
     address public charlie = address(0x3);
 
+    event NFTCreated(
+        address indexed nftAddress,
+        address indexed creator,
+        string name,
+        string symbol,
+        string description,
+        uint8 usageType
+    );
+    event Minted(uint256 indexed tokenId, address indexed to, uint8 rarity, uint256 luckyNumber);
+    event Drifted(uint256 indexed tokenId, address indexed from, address indexed to);
+    event MessageLeft(uint256 indexed tokenId, address indexed by, string message);
+
     function setUp() public {
         factory = new NFTFactory();
-        memeToken = new MockERC20();
-
-        // Give users some tokens
-        vm.deal(alice, 100 ether);
-        vm.deal(bob, 100 ether);
-        vm.deal(charlie, 100 ether);
-
-        memeToken.mint(alice, 1000000 ether);
-        memeToken.mint(bob, 1000000 ether);
-        memeToken.mint(charlie, 1000000 ether);
     }
 
-    // ========== ERC721 Tests ==========
+    // ========== Collection Creation Tests ==========
 
-    function test_CreateERC721Basic() public {
+    function test_CreateCollectionBasic() public {
         vm.prank(alice);
-        address nftAddr = factory.createERC721Free("My NFT", "MNFT", "ipfs://base/", true, false, address(0), 0);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "A cool collection", "ipfs://base/");
 
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-        assertEq(nft.name(), "My NFT");
-        assertEq(nft.symbol(), "MNFT");
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        assertEq(nft.name(), "My Collection");
+        assertEq(nft.symbol(), "MC");
+        assertEq(nft.collectionDescription(), "A cool collection");
+        assertEq(nft.baseImageURI(), "ipfs://base/");
         assertEq(nft.owner(), alice);
+        assertEq(nft.totalSupply(), 0);
     }
 
-    function test_ERC721StakeToMint() public {
-        // Alice creates NFT with stake-to-mint
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 1000 ether);
+    function test_CreateCollectionEmitsEvent() public {
+        vm.startPrank(alice);
 
-        SimpleERC721 nft = SimpleERC721(nftAddr);
+        vm.expectEmit(false, true, false, false);
+        emit NFTCreated(address(0), alice, "Test", "TST", "Test desc", 0);
 
-        // Bob stakes to mint
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 tokenId = nft.stakeToMint();
+        factory.createERC721Free("Test", "TST", "Test desc", "");
+
         vm.stopPrank();
+    }
 
-        assertEq(nft.ownerOf(tokenId), bob);
+    function test_CreateCollectionEmptyNameReverts() public {
+        vm.prank(alice);
+        vm.expectRevert(NFTFactory.NameEmpty.selector);
+        factory.createERC721Free("", "MC", "Description", "");
+    }
+
+    function test_CreateCollectionEmptySymbolReverts() public {
+        vm.prank(alice);
+        vm.expectRevert(NFTFactory.SymbolEmpty.selector);
+        factory.createERC721Free("My Collection", "", "Description", "");
+    }
+
+    function test_CREATE2SameParamsDifferentCreators() public {
+        vm.prank(alice);
+        address nft1 = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        vm.prank(bob);
+        address nft2 = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        // Different creators = different addresses
+        assertFalse(nft1 == nft2);
+    }
+
+    function test_SameCreatorSameParamsReverts() public {
+        vm.startPrank(alice);
+        factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        vm.expectRevert();
+        factory.createERC721Free("My Collection", "MC", "Description", "");
+        vm.stopPrank();
+    }
+
+    // ========== Minting Tests ==========
+
+    function test_MintBasic() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "ipfs://base/");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        uint256 tokenId = nft.mint(bob, "Token #1", "First token", "ipfs://image1");
+
+        assertEq(tokenId, 0);
+        assertEq(nft.ownerOf(0), bob);
         assertEq(nft.balanceOf(bob), 1);
-        assertEq(nft.stakedAmount(tokenId), 1000 ether);
-        assertEq(memeToken.balanceOf(nftAddr), 1000 ether);
+        assertEq(nft.totalSupply(), 1);
     }
 
-    function test_ERC721BurnToRedeem() public {
-        // Create and mint
+    function test_MintWithBaseURI() public {
         vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 1000 ether);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "ipfs://base/");
 
-        SimpleERC721 nft = SimpleERC721(nftAddr);
+        SocialNFT nft = SocialNFT(nftAddress);
 
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 tokenId = nft.stakeToMint();
+        vm.prank(alice);
+        uint256 tokenId = nft.mintWithBaseURI(bob, "Token #1", "First token");
 
-        uint256 balanceBefore = memeToken.balanceOf(bob);
+        assertEq(tokenId, 0);
+        assertEq(nft.ownerOf(0), bob);
+    }
 
-        // Burn to redeem
-        nft.burnToRedeem(tokenId);
+    function test_MintOnlyOwner() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Bob tries to mint - should fail
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.NotOwner.selector);
+        nft.mint(bob, "Token", "Desc", "image");
+    }
+
+    function test_MintToZeroAddressReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        vm.expectRevert(SocialNFT.InvalidRecipient.selector);
+        nft.mint(address(0), "Token", "Desc", "image");
+    }
+
+    function test_MintGeneratesTraits() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        uint256 tokenId = nft.mint(bob, "Token", "Desc", "image");
+
+        (uint8 rarity, uint8 background, uint8 pattern, uint8 glow, uint256 luckyNumber) = nft.getTokenTraits(tokenId);
+
+        // Verify traits are within expected ranges
+        assertTrue(rarity <= 4); // 0-4 for rarity levels
+        assertTrue(background < 10);
+        assertTrue(pattern < 10);
+        assertTrue(glow < 10);
+        assertTrue(luckyNumber < 10000);
+    }
+
+    function test_MintMultipleTokens() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.startPrank(alice);
+        nft.mint(bob, "Token 1", "First", "image1");
+        nft.mint(charlie, "Token 2", "Second", "image2");
+        nft.mint(bob, "Token 3", "Third", "image3");
         vm.stopPrank();
 
-        assertEq(nft.balanceOf(bob), 0);
-        assertEq(memeToken.balanceOf(bob), balanceBefore + 1000 ether);
-        assertEq(memeToken.balanceOf(nftAddr), 0);
-    }
-
-    function test_ERC721MultipleStakeAndRedeem() public {
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 500 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        // Bob mints 3 NFTs
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1500 ether);
-
-        uint256 tokenId1 = nft.stakeToMint();
-        uint256 tokenId2 = nft.stakeToMint();
-        uint256 tokenId3 = nft.stakeToMint();
-
-        assertEq(nft.balanceOf(bob), 3);
-        assertEq(memeToken.balanceOf(nftAddr), 1500 ether);
-
-        // Redeem only tokenId2
-        nft.burnToRedeem(tokenId2);
-
+        assertEq(nft.totalSupply(), 3);
         assertEq(nft.balanceOf(bob), 2);
-        assertEq(memeToken.balanceOf(nftAddr), 1000 ether);
-
-        vm.stopPrank();
+        assertEq(nft.balanceOf(charlie), 1);
+        assertEq(nft.ownerOf(0), bob);
+        assertEq(nft.ownerOf(1), charlie);
+        assertEq(nft.ownerOf(2), bob);
     }
 
-    function test_ERC721StakeToMintNotEnabled() public {
+    // ========== Drift (Transfer Message) System Tests ==========
+
+    function test_TransferCreatesDrift() public {
         vm.prank(alice);
-        address nftAddr = factory.createERC721Free("Regular NFT", "REG", "ipfs://reg/", true, false, address(0), 0);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
 
-        SimpleERC721 nft = SimpleERC721(nftAddr);
+        SocialNFT nft = SocialNFT(nftAddress);
 
-        vm.startPrank(bob);
-        vm.expectRevert("Stake-to-mint not enabled");
-        nft.stakeToMint();
-        vm.stopPrank();
+        // Alice mints to Bob
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Bob transfers to Charlie
+        vm.prank(bob);
+        nft.transferFrom(bob, charlie, 0);
+
+        // Check drift history
+        SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
+        assertEq(history.length, 1);
+        assertEq(history[0].from, bob);
+        assertEq(bytes(history[0].message).length, 0); // No message yet
     }
 
-    // ========== Factory Tests ==========
+    function test_LeaveMessage() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Bob transfers to Charlie
+        vm.prank(bob);
+        nft.transferFrom(bob, charlie, 0);
+
+        // Charlie leaves a message
+        vm.prank(charlie);
+        nft.leaveMessage(0, "Thanks for the NFT!");
+
+        // Check message was recorded
+        SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
+        assertEq(history.length, 1);
+        assertEq(history[0].message, "Thanks for the NFT!");
+    }
+
+    function test_LeaveMessageOnlyTokenOwner() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        vm.prank(bob);
+        nft.transferFrom(bob, charlie, 0);
+
+        // Bob (not the current owner) tries to leave message
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.NotTokenOwner.selector);
+        nft.leaveMessage(0, "Can I leave a message?");
+    }
+
+    function test_LeaveMessageNoDriftHistoryReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Bob tries to leave message but no transfer happened yet
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.NoDriftHistory.selector);
+        nft.leaveMessage(0, "Hello");
+    }
+
+    function test_LeaveMessageAlreadyLeftReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        vm.prank(bob);
+        nft.transferFrom(bob, charlie, 0);
+
+        // Charlie leaves first message
+        vm.prank(charlie);
+        nft.leaveMessage(0, "First message");
+
+        // Charlie tries to leave another message
+        vm.prank(charlie);
+        vm.expectRevert(SocialNFT.AlreadyLeftMessage.selector);
+        nft.leaveMessage(0, "Second message");
+    }
+
+    function test_MultipleDrifts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // First drift: Bob -> Charlie
+        vm.prank(bob);
+        nft.transferFrom(bob, charlie, 0);
+
+        vm.prank(charlie);
+        nft.leaveMessage(0, "Message from Charlie");
+
+        // Second drift: Charlie -> Alice
+        vm.prank(charlie);
+        nft.transferFrom(charlie, alice, 0);
+
+        vm.prank(alice);
+        nft.leaveMessage(0, "Message from Alice");
+
+        // Third drift: Alice -> Bob
+        vm.prank(alice);
+        nft.transferFrom(alice, bob, 0);
+
+        // Check drift history
+        SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
+        assertEq(history.length, 3);
+        assertEq(history[0].from, bob);
+        assertEq(history[0].message, "Message from Charlie");
+        assertEq(history[1].from, charlie);
+        assertEq(history[1].message, "Message from Alice");
+        assertEq(history[2].from, alice);
+        assertEq(bytes(history[2].message).length, 0); // Bob hasn't left a message yet
+
+        assertEq(nft.getDriftCount(0), 3);
+    }
+
+    // ========== ERC721 Standard Tests ==========
+
+    function test_TransferFrom() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        vm.prank(bob);
+        nft.transferFrom(bob, charlie, 0);
+
+        assertEq(nft.ownerOf(0), charlie);
+        assertEq(nft.balanceOf(bob), 0);
+        assertEq(nft.balanceOf(charlie), 1);
+    }
+
+    function test_Approve() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        vm.prank(bob);
+        nft.approve(charlie, 0);
+
+        assertEq(nft.getApproved(0), charlie);
+
+        // Charlie can now transfer
+        vm.prank(charlie);
+        nft.transferFrom(bob, alice, 0);
+
+        assertEq(nft.ownerOf(0), alice);
+    }
+
+    function test_SetApprovalForAll() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token1", "Desc", "image1");
+        vm.prank(alice);
+        nft.mint(bob, "Token2", "Desc", "image2");
+
+        vm.prank(bob);
+        nft.setApprovalForAll(charlie, true);
+
+        assertTrue(nft.isApprovedForAll(bob, charlie));
+
+        // Charlie can transfer any of Bob's tokens
+        vm.startPrank(charlie);
+        nft.transferFrom(bob, alice, 0);
+        nft.transferFrom(bob, alice, 1);
+        vm.stopPrank();
+
+        assertEq(nft.ownerOf(0), alice);
+        assertEq(nft.ownerOf(1), alice);
+    }
+
+    function test_TransferFromNotAuthorizedReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Charlie tries to transfer without approval
+        vm.prank(charlie);
+        vm.expectRevert(SocialNFT.NotAuthorized.selector);
+        nft.transferFrom(bob, charlie, 0);
+    }
+
+    function test_SupportsInterface() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // ERC721
+        assertTrue(nft.supportsInterface(0x80ac58cd));
+        // ERC721Metadata
+        assertTrue(nft.supportsInterface(0x5b5e139f));
+        // ERC165
+        assertTrue(nft.supportsInterface(0x01ffc9a7));
+        // Random interface
+        assertFalse(nft.supportsInterface(0x12345678));
+    }
+
+    // ========== TokenURI Tests ==========
+
+    function test_TokenURI() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "ipfs://base/");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Test with custom image
+        vm.prank(alice);
+        nft.mint(bob, "Cool NFT", "A very cool NFT", "ipfs://image.png");
+
+        string memory uri = nft.tokenURI(0);
+        assertEq(uri, "ipfs://image.png");
+
+        // Test with baseURI fallback
+        vm.prank(alice);
+        nft.mintWithBaseURI(bob, "NFT #1", "First NFT");
+
+        uri = nft.tokenURI(1);
+        assertEq(uri, "ipfs://base/1");
+    }
+
+    function test_TokenURINotExistReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.expectRevert(SocialNFT.TokenNotExist.selector);
+        nft.tokenURI(999);
+    }
+
+    // ========== Factory Tracking Tests ==========
+
+    function test_TrackAllNFTs() public {
+        vm.prank(alice);
+        address nft1 = factory.createERC721Free("Collection1", "C1", "Desc1", "");
+
+        vm.prank(bob);
+        address nft2 = factory.createERC721Free("Collection2", "C2", "Desc2", "");
+
+        assertEq(factory.allNFTsLength(), 2);
+
+        address[] memory allNFTs = factory.getAllNFTs();
+        assertEq(allNFTs.length, 2);
+        assertEq(allNFTs[0], nft1);
+        assertEq(allNFTs[1], nft2);
+    }
 
     function test_TrackUserNFTs() public {
         vm.startPrank(alice);
-        address nft1 = factory.createERC721Free("NFT1", "N1", "ipfs://1/", true, false, address(0), 0);
-        address nft2 = factory.createERC721Free("NFT2", "N2", "ipfs://2/", true, false, address(0), 0);
+        address nft1 = factory.createERC721Free("Collection1", "C1", "Desc1", "");
+        address nft2 = factory.createERC721Free("Collection2", "C2", "Desc2", "");
         vm.stopPrank();
+
+        vm.prank(bob);
+        address nft3 = factory.createERC721Free("Collection3", "C3", "Desc3", "");
+
+        assertEq(factory.userNFTsLength(alice), 2);
+        assertEq(factory.userNFTsLength(bob), 1);
 
         address[] memory aliceNFTs = factory.getUserNFTs(alice);
         assertEq(aliceNFTs.length, 2);
         assertEq(aliceNFTs[0], nft1);
         assertEq(aliceNFTs[1], nft2);
 
-        assertEq(factory.allNFTsLength(), 2);
+        address[] memory bobNFTs = factory.getUserNFTs(bob);
+        assertEq(bobNFTs.length, 1);
+        assertEq(bobNFTs[0], nft3);
     }
 
-    function test_GetNFTInfo() public {
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("InfoNFT", "INFO", "ipfs://info/", true, true, address(memeToken), 1000 ether);
+    // ========== Pagination Tests ==========
 
-        NFTFactory.NFTInfo memory info = factory.getNFTInfo(nftAddr);
-
-        assertEq(info.nftAddress, nftAddr);
-        assertEq(info.name, "InfoNFT");
-        assertEq(info.symbol, "INFO");
-        assertEq(info.creator, alice);
-        assertTrue(info.stakeToMintEnabled);
-        assertEq(info.stakeToken, address(memeToken));
-    }
-
-    function test_PaginationUserNFTs() public {
-        // Alice creates 5 NFTs
+    function test_GetUserNFTsPaginated() public {
         vm.startPrank(alice);
-        for (uint256 i = 0; i < 5; i++) {
-            factory.createERC721Free(
-                string(abi.encodePacked("NFT", _toString(i))),
-                string(abi.encodePacked("N", _toString(i))),
-                "ipfs://test/",
-                true,
-                false,
-                address(0),
-                0
-            );
-        }
+        address nft1 = factory.createERC721Free("Collection1", "C1", "D1", "");
+        address nft2 = factory.createERC721Free("Collection2", "C2", "D2", "");
+        address nft3 = factory.createERC721Free("Collection3", "C3", "D3", "");
+        address nft4 = factory.createERC721Free("Collection4", "C4", "D4", "");
+        address nft5 = factory.createERC721Free("Collection5", "C5", "D5", "");
         vm.stopPrank();
 
-        // Get page 1 (offset 0, limit 2)
-        (address[] memory page1, uint256 total1) = factory.getUserNFTsPaginated(alice, 0, 2);
-        assertEq(total1, 5);
-        assertEq(page1.length, 2);
-
-        // Get page 2 (offset 2, limit 2)
-        (address[] memory page2, uint256 total2) = factory.getUserNFTsPaginated(alice, 2, 2);
-        assertEq(total2, 5);
-        assertEq(page2.length, 2);
-
-        // Get page 3 (offset 4, limit 2) - should only get 1
-        (address[] memory page3, uint256 total3) = factory.getUserNFTsPaginated(alice, 4, 2);
-        assertEq(total3, 5);
-        assertEq(page3.length, 1);
-
-        // Out of bounds
-        (address[] memory page4, uint256 total4) = factory.getUserNFTsPaginated(alice, 10, 2);
-        assertEq(total4, 5);
-        assertEq(page4.length, 0);
-    }
-
-    function test_PaginationUserNFTsInfo() public {
-        // Alice creates 3 NFTs
-        vm.startPrank(alice);
-        factory.createERC721Free("NFT0", "N0", "ipfs://0/", true, false, address(0), 0);
-        factory.createERC721Free("NFT1", "N1", "ipfs://1/", true, true, address(memeToken), 100 ether);
-        factory.createERC721Free("NFT2", "N2", "ipfs://2/", true, false, address(0), 0);
-        vm.stopPrank();
-
-        (NFTFactory.NFTInfo[] memory infos, uint256 total) = factory.getUserNFTsInfoPaginated(alice, 0, 10);
-
-        assertEq(total, 3);
-        assertEq(infos.length, 3);
-        assertEq(infos[0].name, "NFT0");
-        assertEq(infos[1].name, "NFT1");
-        assertEq(infos[2].name, "NFT2");
-        assertFalse(infos[0].stakeToMintEnabled);
-        assertTrue(infos[1].stakeToMintEnabled);
-        assertEq(infos[1].stakeToken, address(memeToken));
-    }
-
-    function test_PaginationAllNFTs() public {
-        // Alice creates 2, Bob creates 3
-        vm.startPrank(alice);
-        factory.createERC721Free("Alice1", "A1", "ipfs://a1/", true, false, address(0), 0);
-        factory.createERC721Free("Alice2", "A2", "ipfs://a2/", true, false, address(0), 0);
-        vm.stopPrank();
-
-        vm.startPrank(bob);
-        factory.createERC721Free("Bob1", "B1", "ipfs://b1/", true, false, address(0), 0);
-        factory.createERC721Free("Bob2", "B2", "ipfs://b2/", true, false, address(0), 0);
-        factory.createERC721Free("Bob3", "B3", "ipfs://b3/", true, false, address(0), 0);
-        vm.stopPrank();
-
-        (address[] memory allNFTs, uint256 total) = factory.getAllNFTsPaginated(0, 3);
+        // Get first 2 (offset=0, limit=2)
+        (address[] memory nfts, uint256 total) = factory.getUserNFTsPaginated(alice, 0, 2);
         assertEq(total, 5);
-        assertEq(allNFTs.length, 3);
+        assertEq(nfts.length, 2);
+        assertEq(nfts[0], nft1);
+        assertEq(nfts[1], nft2);
 
-        (NFTFactory.NFTInfo[] memory allInfos, uint256 totalInfos) = factory.getAllNFTsInfoPaginated(0, 10);
-        assertEq(totalInfos, 5);
-        assertEq(allInfos.length, 5);
-        assertEq(allInfos[0].name, "Alice1");
-        assertEq(allInfos[4].name, "Bob3");
+        // Get next 2 (offset=2, limit=2)
+        (nfts, total) = factory.getUserNFTsPaginated(alice, 2, 2);
+        assertEq(total, 5);
+        assertEq(nfts.length, 2);
+        assertEq(nfts[0], nft3);
+        assertEq(nfts[1], nft4);
+
+        // Get last (offset=4, limit=2)
+        (nfts, total) = factory.getUserNFTsPaginated(alice, 4, 2);
+        assertEq(total, 5);
+        assertEq(nfts.length, 1);
+        assertEq(nfts[0], nft5);
     }
 
-    // Helper function
-    function _toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits--;
-            buffer[digits] = bytes1(uint8(48 + (value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
-
-    // ========== Transfer with Stake Tests ==========
-
-    function test_TransferNFTWithStake() public {
-        // Alice creates NFT with stake-to-mint
+    function test_GetUserNFTsPaginatedOffsetTooLarge() public {
         vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("StakeNFT", "SNFT", "ipfs://stake/", true, true, address(memeToken), 1000 ether);
+        factory.createERC721Free("Collection1", "C1", "D1", "");
 
-        SimpleERC721 nft = SimpleERC721(nftAddr);
+        (address[] memory nfts, uint256 total) = factory.getUserNFTsPaginated(alice, 10, 5);
+        assertEq(total, 1);
+        assertEq(nfts.length, 0);
+    }
 
-        // Bob mints NFT by staking 1000 MEME
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 tokenId = nft.stakeToMint();
-        vm.stopPrank();
+    function test_GetAllNFTsPaginated() public {
+        vm.prank(alice);
+        address nft1 = factory.createERC721Free("Collection1", "C1", "D1", "");
 
-        // Verify Bob owns the NFT with 1000 MEME staked
+        vm.prank(bob);
+        address nft2 = factory.createERC721Free("Collection2", "C2", "D2", "");
+
+        vm.prank(alice);
+        address nft3 = factory.createERC721Free("Collection3", "C3", "D3", "");
+
+        // Get first 2
+        (address[] memory nfts, uint256 total) = factory.getAllNFTsPaginated(0, 2);
+        assertEq(total, 3);
+        assertEq(nfts.length, 2);
+        assertEq(nfts[0], nft1);
+        assertEq(nfts[1], nft2);
+
+        // Get last
+        (nfts, total) = factory.getAllNFTsPaginated(2, 10);
+        assertEq(total, 3);
+        assertEq(nfts.length, 1);
+        assertEq(nfts[0], nft3);
+    }
+
+    // ========== Usage Tracking Tests ==========
+
+    function test_FreeUsageTracking() public {
+        assertEq(factory.totalFreeUsage(), 0);
+
+        vm.prank(alice);
+        factory.createERC721Free("Collection1", "C1", "D1", "");
+
+        assertEq(factory.totalFreeUsage(), 1);
+
+        vm.prank(bob);
+        factory.createERC721Free("Collection2", "C2", "D2", "");
+
+        assertEq(factory.totalFreeUsage(), 2);
+    }
+
+    // ========== Rarity Constants Tests ==========
+
+    function test_RarityConstants() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        assertEq(nft.RARITY_COMMON(), 0);
+        assertEq(nft.RARITY_UNCOMMON(), 1);
+        assertEq(nft.RARITY_RARE(), 2);
+        assertEq(nft.RARITY_LEGENDARY(), 3);
+        assertEq(nft.RARITY_MYTHIC(), 4);
+    }
+
+    // ========== Edge Cases ==========
+
+    function test_TransferClearsApproval() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Bob approves Charlie
+        vm.prank(bob);
+        nft.approve(charlie, 0);
+        assertEq(nft.getApproved(0), charlie);
+
+        // Bob transfers to Alice
+        vm.prank(bob);
+        nft.transferFrom(bob, alice, 0);
+
+        // Approval should be cleared
+        assertEq(nft.getApproved(0), address(0));
+    }
+
+    function test_SafeTransferFrom() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Safe transfer (without data)
+        vm.prank(bob);
+        nft.safeTransferFrom(bob, charlie, 0);
+
+        assertEq(nft.ownerOf(0), charlie);
+    }
+
+    function test_SafeTransferFromWithData() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc", "image");
+
+        // Safe transfer (with data)
+        vm.prank(bob);
+        nft.safeTransferFrom(bob, charlie, 0, "some data");
+
+        assertEq(nft.ownerOf(0), charlie);
+    }
+
+    // ========== Fuzz Tests ==========
+
+    function testFuzz_CreateCollection(string memory _name, string memory _symbol, string memory _description) public {
+        vm.assume(bytes(_name).length > 0 && bytes(_name).length < 100);
+        vm.assume(bytes(_symbol).length > 0 && bytes(_symbol).length < 20);
+
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free(_name, _symbol, _description, "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        assertEq(nft.name(), _name);
+        assertEq(nft.symbol(), _symbol);
+        assertEq(nft.collectionDescription(), _description);
+        assertEq(nft.owner(), alice);
+    }
+
+    function testFuzz_MintAndTransfer(string memory _tokenName, string memory _tokenDesc) public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("Collection", "COL", "Desc", "");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        uint256 tokenId = nft.mint(bob, _tokenName, _tokenDesc, "image");
+
         assertEq(nft.ownerOf(tokenId), bob);
-        assertEq(nft.stakedAmount(tokenId), 1000 ether);
 
-        // Bob transfers NFT to Charlie
         vm.prank(bob);
         nft.transferFrom(bob, charlie, tokenId);
 
-        // Charlie now owns the NFT
         assertEq(nft.ownerOf(tokenId), charlie);
-        // Staked amount is still bound to tokenId
-        assertEq(nft.stakedAmount(tokenId), 1000 ether);
-
-        // Charlie can redeem the staked tokens
-        vm.prank(charlie);
-        nft.burnToRedeem(tokenId);
-
-        // Charlie got the 1000 MEME
-        assertEq(memeToken.balanceOf(charlie), 1000000 ether + 1000 ether);
-    }
-
-    function test_TransferNFTWithStakeValue() public {
-        // Demonstrate that NFT with stake has more value
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("ValueNFT", "VNFT", "ipfs://value/", true, true, address(memeToken), 5000 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        // Bob mints NFT by staking 5000 MEME
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 5000 ether);
-        uint256 tokenId = nft.stakeToMint();
-        vm.stopPrank();
-
-        // Bob sells NFT to Charlie (transfer = sale in this scenario)
-        // The NFT is worth: NFT value + 5000 MEME guaranteed redemption value
-        vm.prank(bob);
-        nft.transferFrom(bob, charlie, tokenId);
-
-        // Charlie can always redeem minimum 5000 MEME
-        uint256 charlieBalanceBefore = memeToken.balanceOf(charlie);
-        vm.prank(charlie);
-        nft.burnToRedeem(tokenId);
-
-        assertEq(memeToken.balanceOf(charlie), charlieBalanceBefore + 5000 ether);
-    }
-
-    function test_MultipleTransfersPreserveStake() public {
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("MultiNFT", "MNFT", "ipfs://multi/", true, true, address(memeToken), 2000 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        // Bob mints
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 2000 ether);
-        uint256 tokenId = nft.stakeToMint();
-        vm.stopPrank();
-
-        // Bob → Charlie
-        vm.prank(bob);
-        nft.transferFrom(bob, charlie, tokenId);
-        assertEq(nft.stakedAmount(tokenId), 2000 ether);
-
-        // Charlie → Alice
-        vm.prank(charlie);
-        nft.transferFrom(charlie, alice, tokenId);
-        assertEq(nft.stakedAmount(tokenId), 2000 ether);
-
-        // Alice redeems
-        vm.prank(alice);
-        nft.burnToRedeem(tokenId);
-        // Alice should get the full 2000 MEME
-        assertEq(memeToken.balanceOf(alice), 1000000 ether + 2000 ether);
-    }
-
-    function test_BobCannotRedeemAfterTransfer() public {
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("NoRedeemNFT", "NR", "ipfs://nr/", true, true, address(memeToken), 1000 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 tokenId = nft.stakeToMint();
-        vm.stopPrank();
-
-        // Bob transfers to Charlie
-        vm.prank(bob);
-        nft.transferFrom(bob, charlie, tokenId);
-
-        // Bob tries to redeem but fails (not owner anymore)
-        vm.prank(bob);
-        vm.expectRevert("Not token owner");
-        nft.burnToRedeem(tokenId);
-
-        // Charlie can redeem
-        vm.prank(charlie);
-        nft.burnToRedeem(tokenId);
-    }
-
-    function test_CanRedeemFunction() public {
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("RedeemCheck", "RC", "ipfs://rc/", true, true, address(memeToken), 1000 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        // Mint NFT with stake
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 tokenId = nft.stakeToMint();
-        vm.stopPrank();
-
-        // Check can redeem
-        assertTrue(nft.canRedeem(tokenId));
-        assertEq(nft.getRedeemableAmount(tokenId), 1000 ether);
-
-        // After burning, cannot redeem anymore
-        vm.prank(bob);
-        nft.burnToRedeem(tokenId);
-
-        assertFalse(nft.canRedeem(tokenId));
-        assertEq(nft.getRedeemableAmount(tokenId), 0);
-    }
-
-    function test_TransferPreservesRedeemability() public {
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("TransferRedeem", "TR", "ipfs://tr/", true, true, address(memeToken), 500 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 500 ether);
-        uint256 tokenId = nft.stakeToMint();
-        vm.stopPrank();
-
-        // Bob can redeem
-        assertTrue(nft.canRedeem(tokenId));
-
-        // Transfer to Charlie
-        vm.prank(bob);
-        nft.transferFrom(bob, charlie, tokenId);
-
-        // Still redeemable (by Charlie now)
-        assertTrue(nft.canRedeem(tokenId));
-        assertEq(nft.getRedeemableAmount(tokenId), 500 ether);
-    }
-
-    // ========== Game Mechanic Tests ==========
-
-    function test_MemeGameMechanic() public {
-        // Simulate pump.fun style game
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("PumpNFT", "PUMP", "ipfs://pump/", true, true, address(memeToken), 1000 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        // Early adopter Bob gets NFT #0
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 bobTokenId = nft.stakeToMint();
-        assertEq(bobTokenId, 0); // First NFT!
-        vm.stopPrank();
-
-        // Charlie gets NFT #1
-        vm.startPrank(charlie);
-        memeToken.approve(nftAddr, 1000 ether);
-        uint256 charlieTokenId = nft.stakeToMint();
-        assertEq(charlieTokenId, 1);
-        vm.stopPrank();
-
-        // Total staked = 2000 MEME locked
-        assertEq(memeToken.balanceOf(nftAddr), 2000 ether);
-
-        // Bob decides to cash out
-        vm.prank(bob);
-        nft.burnToRedeem(bobTokenId);
-
-        // Total staked = 1000 MEME locked
-        assertEq(memeToken.balanceOf(nftAddr), 1000 ether);
-        assertEq(nft.totalSupply(), 1);
-    }
-
-    function test_TokenPriceImpact() public {
-        // Demonstrate price support mechanism
-        vm.prank(alice);
-        address nftAddr =
-            factory.createERC721Free("Support NFT", "SUP", "ipfs://sup/", true, true, address(memeToken), 10000 ether);
-
-        SimpleERC721 nft = SimpleERC721(nftAddr);
-
-        uint256 initialCirculation = memeToken.balanceOf(bob);
-
-        // Bob stakes 10,000 MEME
-        vm.startPrank(bob);
-        memeToken.approve(nftAddr, 10000 ether);
-        nft.stakeToMint();
-        vm.stopPrank();
-
-        uint256 afterMintCirculation = memeToken.balanceOf(bob);
-
-        // Circulation decreased by 10,000 MEME
-        assertEq(initialCirculation - afterMintCirculation, 10000 ether);
-
-        // This reduces sell pressure on MEME token!
+        assertEq(nft.getDriftCount(tokenId), 1);
     }
 }
