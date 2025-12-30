@@ -140,8 +140,8 @@ contract TokenDistributionTest is Test {
 
         // Deploy WETH at expected address
         weth = new WETH();
-        vm.etch(0xe3E75C1fe9AE82993FEb6F9CA2e9627aaE1e3d18, address(weth).code);
-        weth = WETH(payable(0xe3E75C1fe9AE82993FEb6F9CA2e9627aaE1e3d18));
+        vm.etch(0xFe7291380b8Dc405fEf345222f2De2408A6CA18e, address(weth).code);
+        weth = WETH(payable(0xFe7291380b8Dc405fEf345222f2De2408A6CA18e));
 
         // Deploy TokenDistribution
         distribution = new TokenDistribution();

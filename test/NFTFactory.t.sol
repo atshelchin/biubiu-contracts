@@ -3,9 +3,14 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {NFTFactory, SocialNFT} from "../src/NFTFactory.sol";
+import {NFTMetadata} from "../src/NFTMetadata.sol";
 
 contract NFTFactoryTest is Test {
     NFTFactory public factory;
+    NFTMetadata public metadata;
+
+    // The expected METADATA_CONTRACT address in SocialNFT
+    address constant METADATA_CONTRACT_ADDR = 0xF68B52ceEAFb4eDB2320E44Efa0be2EBe7a715A6;
 
     address public alice = address(0x1);
     address public bob = address(0x2);
@@ -25,20 +30,24 @@ contract NFTFactoryTest is Test {
 
     function setUp() public {
         factory = new NFTFactory();
+
+        // Deploy NFTMetadata and etch it to the expected address
+        metadata = new NFTMetadata();
+        vm.etch(METADATA_CONTRACT_ADDR, address(metadata).code);
     }
 
     // ========== Collection Creation Tests ==========
 
     function test_CreateCollectionBasic() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "A cool collection", "ipfs://base/");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "A cool collection", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         assertEq(nft.name(), "My Collection");
         assertEq(nft.symbol(), "MC");
         assertEq(nft.collectionDescription(), "A cool collection");
-        assertEq(nft.baseImageURI(), "ipfs://base/");
+        assertEq(nft.externalURL(), "https://example.com");
         assertEq(nft.owner(), alice);
         assertEq(nft.totalSupply(), 0);
     }
@@ -49,7 +58,7 @@ contract NFTFactoryTest is Test {
         vm.expectEmit(false, true, false, false);
         emit NFTCreated(address(0), alice, "Test", "TST", "Test desc", 0);
 
-        factory.createERC721Free("Test", "TST", "Test desc", "");
+        factory.createERC721Free("Test", "TST", "Test desc", "https://example.com");
 
         vm.stopPrank();
     }
@@ -57,21 +66,21 @@ contract NFTFactoryTest is Test {
     function test_CreateCollectionEmptyNameReverts() public {
         vm.prank(alice);
         vm.expectRevert(NFTFactory.NameEmpty.selector);
-        factory.createERC721Free("", "MC", "Description", "");
+        factory.createERC721Free("", "MC", "Description", "https://example.com");
     }
 
     function test_CreateCollectionEmptySymbolReverts() public {
         vm.prank(alice);
         vm.expectRevert(NFTFactory.SymbolEmpty.selector);
-        factory.createERC721Free("My Collection", "", "Description", "");
+        factory.createERC721Free("My Collection", "", "Description", "https://example.com");
     }
 
     function test_CREATE2SameParamsDifferentCreators() public {
         vm.prank(alice);
-        address nft1 = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nft1 = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         vm.prank(bob);
-        address nft2 = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nft2 = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         // Different creators = different addresses
         assertFalse(nft1 == nft2);
@@ -79,10 +88,10 @@ contract NFTFactoryTest is Test {
 
     function test_SameCreatorSameParamsReverts() public {
         vm.startPrank(alice);
-        factory.createERC721Free("My Collection", "MC", "Description", "");
+        factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         vm.expectRevert();
-        factory.createERC721Free("My Collection", "MC", "Description", "");
+        factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
         vm.stopPrank();
     }
 
@@ -90,12 +99,12 @@ contract NFTFactoryTest is Test {
 
     function test_MintBasic() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "ipfs://base/");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        uint256 tokenId = nft.mint(bob, "Token #1", "First token", "ipfs://image1");
+        uint256 tokenId = nft.mint(bob, "Token #1", "First token");
 
         assertEq(tokenId, 0);
         assertEq(nft.ownerOf(0), bob);
@@ -105,12 +114,12 @@ contract NFTFactoryTest is Test {
 
     function test_MintWithBaseURI() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "ipfs://base/");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        uint256 tokenId = nft.mintWithBaseURI(bob, "Token #1", "First token");
+        uint256 tokenId = nft.mint(bob, "Token #1", "First token");
 
         assertEq(tokenId, 0);
         assertEq(nft.ownerOf(0), bob);
@@ -118,35 +127,35 @@ contract NFTFactoryTest is Test {
 
     function test_MintOnlyOwner() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         // Bob tries to mint - should fail
         vm.prank(bob);
         vm.expectRevert(SocialNFT.NotOwner.selector);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
     }
 
     function test_MintToZeroAddressReverts() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
         vm.expectRevert(SocialNFT.InvalidRecipient.selector);
-        nft.mint(address(0), "Token", "Desc", "image");
+        nft.mint(address(0), "Token", "Desc");
     }
 
     function test_MintGeneratesTraits() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        uint256 tokenId = nft.mint(bob, "Token", "Desc", "image");
+        uint256 tokenId = nft.mint(bob, "Token", "Desc");
 
         (uint8 rarity, uint8 background, uint8 pattern, uint8 glow, uint256 luckyNumber) = nft.getTokenTraits(tokenId);
 
@@ -160,14 +169,14 @@ contract NFTFactoryTest is Test {
 
     function test_MintMultipleTokens() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.startPrank(alice);
-        nft.mint(bob, "Token 1", "First", "image1");
-        nft.mint(charlie, "Token 2", "Second", "image2");
-        nft.mint(bob, "Token 3", "Third", "image3");
+        nft.mint(bob, "Token 1", "First");
+        nft.mint(charlie, "Token 2", "Second");
+        nft.mint(bob, "Token 3", "Third");
         vm.stopPrank();
 
         assertEq(nft.totalSupply(), 3);
@@ -182,13 +191,13 @@ contract NFTFactoryTest is Test {
 
     function test_TransferCreatesDrift() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         // Alice mints to Bob
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Bob transfers to Charlie
         vm.prank(bob);
@@ -203,12 +212,12 @@ contract NFTFactoryTest is Test {
 
     function test_LeaveMessage() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Bob transfers to Charlie
         vm.prank(bob);
@@ -226,12 +235,12 @@ contract NFTFactoryTest is Test {
 
     function test_LeaveMessageOnlyTokenOwner() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         vm.prank(bob);
         nft.transferFrom(bob, charlie, 0);
@@ -244,12 +253,12 @@ contract NFTFactoryTest is Test {
 
     function test_LeaveMessageNoDriftHistoryReverts() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Bob tries to leave message but no transfer happened yet
         vm.prank(bob);
@@ -259,12 +268,12 @@ contract NFTFactoryTest is Test {
 
     function test_LeaveMessageAlreadyLeftReverts() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         vm.prank(bob);
         nft.transferFrom(bob, charlie, 0);
@@ -281,12 +290,12 @@ contract NFTFactoryTest is Test {
 
     function test_MultipleDrifts() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // First drift: Bob -> Charlie
         vm.prank(bob);
@@ -323,12 +332,12 @@ contract NFTFactoryTest is Test {
 
     function test_TransferFrom() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         vm.prank(bob);
         nft.transferFrom(bob, charlie, 0);
@@ -340,12 +349,12 @@ contract NFTFactoryTest is Test {
 
     function test_Approve() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         vm.prank(bob);
         nft.approve(charlie, 0);
@@ -361,14 +370,14 @@ contract NFTFactoryTest is Test {
 
     function test_SetApprovalForAll() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token1", "Desc", "image1");
+        nft.mint(bob, "Token1", "Desc");
         vm.prank(alice);
-        nft.mint(bob, "Token2", "Desc", "image2");
+        nft.mint(bob, "Token2", "Desc");
 
         vm.prank(bob);
         nft.setApprovalForAll(charlie, true);
@@ -387,12 +396,12 @@ contract NFTFactoryTest is Test {
 
     function test_TransferFromNotAuthorizedReverts() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Charlie tries to transfer without approval
         vm.prank(charlie);
@@ -402,7 +411,7 @@ contract NFTFactoryTest is Test {
 
     function test_SupportsInterface() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
@@ -420,28 +429,41 @@ contract NFTFactoryTest is Test {
 
     function test_TokenURI() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "ipfs://base/");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
-        // Test with custom image
+        // Mint an NFT
         vm.prank(alice);
-        nft.mint(bob, "Cool NFT", "A very cool NFT", "ipfs://image.png");
+        nft.mint(bob, "Cool NFT", "A very cool NFT");
 
+        // TokenURI now returns on-chain generated metadata (base64 JSON)
         string memory uri = nft.tokenURI(0);
-        assertEq(uri, "ipfs://image.png");
+        assertTrue(bytes(uri).length > 0);
+        assertTrue(_startsWith(uri, "data:application/json;base64,"));
 
-        // Test with baseURI fallback
+        // Mint another NFT and verify it also returns on-chain metadata
         vm.prank(alice);
-        nft.mintWithBaseURI(bob, "NFT #1", "First NFT");
+        nft.mint(bob, "NFT #1", "First NFT");
 
         uri = nft.tokenURI(1);
-        assertEq(uri, "ipfs://base/1");
+        assertTrue(bytes(uri).length > 0);
+        assertTrue(_startsWith(uri, "data:application/json;base64,"));
+    }
+
+    function _startsWith(string memory str, string memory prefix) internal pure returns (bool) {
+        bytes memory strBytes = bytes(str);
+        bytes memory prefixBytes = bytes(prefix);
+        if (strBytes.length < prefixBytes.length) return false;
+        for (uint256 i = 0; i < prefixBytes.length; i++) {
+            if (strBytes[i] != prefixBytes[i]) return false;
+        }
+        return true;
     }
 
     function test_TokenURINotExistReverts() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
@@ -453,10 +475,10 @@ contract NFTFactoryTest is Test {
 
     function test_TrackAllNFTs() public {
         vm.prank(alice);
-        address nft1 = factory.createERC721Free("Collection1", "C1", "Desc1", "");
+        address nft1 = factory.createERC721Free("Collection1", "C1", "Desc1", "https://example.com");
 
         vm.prank(bob);
-        address nft2 = factory.createERC721Free("Collection2", "C2", "Desc2", "");
+        address nft2 = factory.createERC721Free("Collection2", "C2", "Desc2", "https://example.com");
 
         assertEq(factory.allNFTsLength(), 2);
 
@@ -468,12 +490,12 @@ contract NFTFactoryTest is Test {
 
     function test_TrackUserNFTs() public {
         vm.startPrank(alice);
-        address nft1 = factory.createERC721Free("Collection1", "C1", "Desc1", "");
-        address nft2 = factory.createERC721Free("Collection2", "C2", "Desc2", "");
+        address nft1 = factory.createERC721Free("Collection1", "C1", "Desc1", "https://example.com");
+        address nft2 = factory.createERC721Free("Collection2", "C2", "Desc2", "https://example.com");
         vm.stopPrank();
 
         vm.prank(bob);
-        address nft3 = factory.createERC721Free("Collection3", "C3", "Desc3", "");
+        address nft3 = factory.createERC721Free("Collection3", "C3", "Desc3", "https://example.com");
 
         assertEq(factory.userNFTsLength(alice), 2);
         assertEq(factory.userNFTsLength(bob), 1);
@@ -492,11 +514,11 @@ contract NFTFactoryTest is Test {
 
     function test_GetUserNFTsPaginated() public {
         vm.startPrank(alice);
-        address nft1 = factory.createERC721Free("Collection1", "C1", "D1", "");
-        address nft2 = factory.createERC721Free("Collection2", "C2", "D2", "");
-        address nft3 = factory.createERC721Free("Collection3", "C3", "D3", "");
-        address nft4 = factory.createERC721Free("Collection4", "C4", "D4", "");
-        address nft5 = factory.createERC721Free("Collection5", "C5", "D5", "");
+        address nft1 = factory.createERC721Free("Collection1", "C1", "D1", "https://example.com");
+        address nft2 = factory.createERC721Free("Collection2", "C2", "D2", "https://example.com");
+        address nft3 = factory.createERC721Free("Collection3", "C3", "D3", "https://example.com");
+        address nft4 = factory.createERC721Free("Collection4", "C4", "D4", "https://example.com");
+        address nft5 = factory.createERC721Free("Collection5", "C5", "D5", "https://example.com");
         vm.stopPrank();
 
         // Get first 2 (offset=0, limit=2)
@@ -522,7 +544,7 @@ contract NFTFactoryTest is Test {
 
     function test_GetUserNFTsPaginatedOffsetTooLarge() public {
         vm.prank(alice);
-        factory.createERC721Free("Collection1", "C1", "D1", "");
+        factory.createERC721Free("Collection1", "C1", "D1", "https://example.com");
 
         (address[] memory nfts, uint256 total) = factory.getUserNFTsPaginated(alice, 10, 5);
         assertEq(total, 1);
@@ -531,13 +553,13 @@ contract NFTFactoryTest is Test {
 
     function test_GetAllNFTsPaginated() public {
         vm.prank(alice);
-        address nft1 = factory.createERC721Free("Collection1", "C1", "D1", "");
+        address nft1 = factory.createERC721Free("Collection1", "C1", "D1", "https://example.com");
 
         vm.prank(bob);
-        address nft2 = factory.createERC721Free("Collection2", "C2", "D2", "");
+        address nft2 = factory.createERC721Free("Collection2", "C2", "D2", "https://example.com");
 
         vm.prank(alice);
-        address nft3 = factory.createERC721Free("Collection3", "C3", "D3", "");
+        address nft3 = factory.createERC721Free("Collection3", "C3", "D3", "https://example.com");
 
         // Get first 2
         (address[] memory nfts, uint256 total) = factory.getAllNFTsPaginated(0, 2);
@@ -559,12 +581,12 @@ contract NFTFactoryTest is Test {
         assertEq(factory.totalFreeUsage(), 0);
 
         vm.prank(alice);
-        factory.createERC721Free("Collection1", "C1", "D1", "");
+        factory.createERC721Free("Collection1", "C1", "D1", "https://example.com");
 
         assertEq(factory.totalFreeUsage(), 1);
 
         vm.prank(bob);
-        factory.createERC721Free("Collection2", "C2", "D2", "");
+        factory.createERC721Free("Collection2", "C2", "D2", "https://example.com");
 
         assertEq(factory.totalFreeUsage(), 2);
     }
@@ -573,27 +595,26 @@ contract NFTFactoryTest is Test {
 
     function test_RarityConstants() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         assertEq(nft.RARITY_COMMON(), 0);
-        assertEq(nft.RARITY_UNCOMMON(), 1);
-        assertEq(nft.RARITY_RARE(), 2);
-        assertEq(nft.RARITY_LEGENDARY(), 3);
-        assertEq(nft.RARITY_MYTHIC(), 4);
+        assertEq(nft.RARITY_RARE(), 1);
+        assertEq(nft.RARITY_LEGENDARY(), 2);
+        assertEq(nft.RARITY_EPIC(), 3);
     }
 
     // ========== Edge Cases ==========
 
     function test_TransferClearsApproval() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Bob approves Charlie
         vm.prank(bob);
@@ -610,12 +631,12 @@ contract NFTFactoryTest is Test {
 
     function test_SafeTransferFrom() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Safe transfer (without data)
         vm.prank(bob);
@@ -626,12 +647,12 @@ contract NFTFactoryTest is Test {
 
     function test_SafeTransferFromWithData() public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "");
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        nft.mint(bob, "Token", "Desc", "image");
+        nft.mint(bob, "Token", "Desc");
 
         // Safe transfer (with data)
         vm.prank(bob);
@@ -647,7 +668,7 @@ contract NFTFactoryTest is Test {
         vm.assume(bytes(_symbol).length > 0 && bytes(_symbol).length < 20);
 
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free(_name, _symbol, _description, "");
+        address nftAddress = factory.createERC721Free(_name, _symbol, _description, "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
@@ -659,12 +680,12 @@ contract NFTFactoryTest is Test {
 
     function testFuzz_MintAndTransfer(string memory _tokenName, string memory _tokenDesc) public {
         vm.prank(alice);
-        address nftAddress = factory.createERC721Free("Collection", "COL", "Desc", "");
+        address nftAddress = factory.createERC721Free("Collection", "COL", "Desc", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
         vm.prank(alice);
-        uint256 tokenId = nft.mint(bob, _tokenName, _tokenDesc, "image");
+        uint256 tokenId = nft.mint(bob, _tokenName, _tokenDesc);
 
         assertEq(nft.ownerOf(tokenId), bob);
 

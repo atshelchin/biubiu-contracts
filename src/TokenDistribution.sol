@@ -32,7 +32,7 @@ interface IBiuBiuPremium {
 contract TokenDistribution {
     // Constants
     IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
-    IWETH public constant WETH = IWETH(0xe3E75C1fe9AE82993FEb6F9CA2e9627aaE1e3d18);
+    IWETH public constant WETH = IWETH(0xFe7291380b8Dc405fEf345222f2De2408A6CA18e);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     uint256 public constant MAX_BATCH_SIZE = 100;
     address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;

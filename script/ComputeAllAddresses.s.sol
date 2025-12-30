@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {TokenFactory} from "../src/TokenFactory.sol";
 import {NFTFactory} from "../src/NFTFactory.sol";
+import {NFTMetadata} from "../src/NFTMetadata.sol";
 import {WETH} from "../src/WETH.sol";
 import {TokenDistribution} from "../src/TokenDistribution.sol";
 import {TokenSweep} from "../src/TokenSweep.sol";
@@ -47,6 +48,9 @@ contract ComputeAllAddressesScript is Script {
 
         // NFTFactory
         _printContractInfo("NFTFactory", type(NFTFactory).creationCode, salt);
+
+        // NFTMetadata
+        _printContractInfo("NFTMetadata", type(NFTMetadata).creationCode, salt);
 
         // TokenSweep
         _printContractInfo("TokenSweep", type(TokenSweep).creationCode, salt);
@@ -93,6 +97,8 @@ contract ComputeAllAddressesScript is Script {
             return _computeCreate2Address(type(TokenFactory).creationCode, salt);
         } else if (keccak256(bytes(contractName)) == keccak256(bytes("NFTFactory"))) {
             return _computeCreate2Address(type(NFTFactory).creationCode, salt);
+        } else if (keccak256(bytes(contractName)) == keccak256(bytes("NFTMetadata"))) {
+            return _computeCreate2Address(type(NFTMetadata).creationCode, salt);
         } else if (keccak256(bytes(contractName)) == keccak256(bytes("TokenSweep"))) {
             return _computeCreate2Address(type(TokenSweep).creationCode, salt);
         } else if (keccak256(bytes(contractName)) == keccak256(bytes("BiuBiuPremium"))) {
@@ -104,7 +110,7 @@ contract ComputeAllAddressesScript is Script {
     /// @notice Get all contract addresses as a struct array
     function getAllAddresses() external pure returns (ContractInfo[] memory) {
         bytes32 salt = bytes32(uint256(0));
-        ContractInfo[] memory contracts = new ContractInfo[](6);
+        ContractInfo[] memory contracts = new ContractInfo[](7);
 
         bytes memory wethBytecode = type(WETH).creationCode;
         contracts[0] = ContractInfo({
@@ -138,8 +144,16 @@ contract ComputeAllAddressesScript is Script {
             bytecodeLength: nfBytecode.length
         });
 
-        bytes memory tsBytecode = type(TokenSweep).creationCode;
+        bytes memory nmBytecode = type(NFTMetadata).creationCode;
         contracts[4] = ContractInfo({
+            name: "NFTMetadata",
+            predictedAddress: _computeCreate2Address(nmBytecode, salt),
+            bytecodeHash: keccak256(nmBytecode),
+            bytecodeLength: nmBytecode.length
+        });
+
+        bytes memory tsBytecode = type(TokenSweep).creationCode;
+        contracts[5] = ContractInfo({
             name: "TokenSweep",
             predictedAddress: _computeCreate2Address(tsBytecode, salt),
             bytecodeHash: keccak256(tsBytecode),
@@ -147,7 +161,7 @@ contract ComputeAllAddressesScript is Script {
         });
 
         bytes memory bbpBytecode = type(BiuBiuPremium).creationCode;
-        contracts[5] = ContractInfo({
+        contracts[6] = ContractInfo({
             name: "BiuBiuPremium",
             predictedAddress: _computeCreate2Address(bbpBytecode, salt),
             bytecodeHash: keccak256(bbpBytecode),

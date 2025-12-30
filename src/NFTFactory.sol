@@ -65,20 +65,20 @@ contract NFTFactory {
      * @param name Collection name
      * @param symbol Collection symbol
      * @param description Collection description
-     * @param baseImageURI Base URI for token images
+     * @param externalURL Project website URL
      * @param referrer Referrer address for fee sharing
      */
     function createERC721(
         string memory name,
         string memory symbol,
         string memory description,
-        string memory baseImageURI,
+        string memory externalURL,
         address referrer
     ) external payable nonReentrant returns (address) {
         // Check premium status and collect fee
         uint8 usageType = _checkAndCollectFee(referrer);
 
-        return _createERC721(name, symbol, description, baseImageURI, usageType);
+        return _createERC721(name, symbol, description, externalURL, usageType);
     }
 
     /**
@@ -86,16 +86,16 @@ contract NFTFactory {
      * @param name Collection name
      * @param symbol Collection symbol
      * @param description Collection description
-     * @param baseImageURI Base URI for token images
+     * @param externalURL Project website URL
      */
     function createERC721Free(
         string memory name,
         string memory symbol,
         string memory description,
-        string memory baseImageURI
+        string memory externalURL
     ) external nonReentrant returns (address) {
         totalFreeUsage++;
-        return _createERC721(name, symbol, description, baseImageURI, USAGE_FREE);
+        return _createERC721(name, symbol, description, externalURL, USAGE_FREE);
     }
 
     /**
@@ -105,15 +105,15 @@ contract NFTFactory {
         string memory name,
         string memory symbol,
         string memory description,
-        string memory baseImageURI,
+        string memory externalURL,
         uint8 usageType
     ) internal returns (address) {
         if (bytes(name).length == 0) revert NameEmpty();
         if (bytes(symbol).length == 0) revert SymbolEmpty();
 
-        bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, baseImageURI));
+        bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, externalURL));
 
-        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, baseImageURI, msg.sender);
+        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, externalURL, msg.sender);
 
         address nftAddress = address(nft);
         allNFTs.push(nftAddress);
@@ -241,6 +241,21 @@ interface IERC721Receiver {
         returns (bytes4);
 }
 
+interface INFTMetadata {
+    function generateMetadata(
+        string memory collectionName,
+        string memory tokenName,
+        string memory description,
+        string memory externalURL,
+        uint8 rarity,
+        uint8 background,
+        uint8 pattern,
+        uint8 glow,
+        uint256 luckyNumber,
+        uint256 driftCount
+    ) external view returns (string memory);
+}
+
 /**
  * @title SocialNFT
  * @notice ERC721 NFT with random traits and social features
@@ -248,28 +263,29 @@ interface IERC721Receiver {
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract SocialNFT {
+    // NFTMetadata contract address (deployed separately)
+    address public constant METADATA_CONTRACT = 0xF68B52ceEAFb4eDB2320E44Efa0be2EBe7a715A6; // TODO: Set after deployment
+
     // Collection info
     string public name;
     string public symbol;
     string public collectionDescription;
-    string public baseImageURI;
+    string public externalURL; // Project website URL
 
     uint256 public totalSupply;
     uint256 public nextTokenId;
     address public owner;
 
     // Rarity constants
-    uint8 public constant RARITY_COMMON = 0; // 60%
-    uint8 public constant RARITY_UNCOMMON = 1; // 25%
-    uint8 public constant RARITY_RARE = 2; // 10%
-    uint8 public constant RARITY_LEGENDARY = 3; // 4%
-    uint8 public constant RARITY_MYTHIC = 4; // 1%
+    uint8 public constant RARITY_COMMON = 0; // 70%
+    uint8 public constant RARITY_RARE = 1; // 20%
+    uint8 public constant RARITY_LEGENDARY = 2; // 8%
+    uint8 public constant RARITY_EPIC = 3; // 2%
 
     // Token metadata
     struct TokenData {
         string name;
         string description;
-        string image;
         uint256 createdAt;
     }
 
@@ -327,72 +343,35 @@ contract SocialNFT {
         string memory _name,
         string memory _symbol,
         string memory _collectionDescription,
-        string memory _baseImageURI,
+        string memory _externalURL,
         address _owner
     ) {
         name = _name;
         symbol = _symbol;
         collectionDescription = _collectionDescription;
-        baseImageURI = _baseImageURI;
+        externalURL = _externalURL;
         owner = _owner;
     }
 
     // ============ Mint Functions ============
 
     /**
-     * @notice Mint NFT with custom metadata (only owner)
-     * @param to Recipient address
-     * @param _name Token name
-     * @param _description Token description
-     * @param _image Token image URI (IPFS or HTTPS)
-     */
-    function mint(address to, string calldata _name, string calldata _description, string calldata _image)
-        public
-        onlyOwner
-        returns (uint256)
-    {
-        if (to == address(0)) revert InvalidRecipient();
-
-        uint256 tokenId = nextTokenId++;
-        ownerOf[tokenId] = to;
-        balanceOf[to]++;
-        totalSupply++;
-
-        // Set metadata
-        tokenData[tokenId] =
-            TokenData({name: _name, description: _description, image: _image, createdAt: block.timestamp});
-
-        // Generate random traits
-        tokenTraits[tokenId] = _generateTraits(tokenId);
-
-        emit Transfer(address(0), to, tokenId);
-        emit Minted(tokenId, to, tokenTraits[tokenId].rarity, tokenTraits[tokenId].luckyNumber);
-
-        return tokenId;
-    }
-
-    /**
-     * @notice Mint NFT with default image from baseImageURI
+     * @notice Mint NFT with on-chain generated SVG (only owner)
      * @param to Recipient address
      * @param _name Token name
      * @param _description Token description
      */
-    function mintWithBaseURI(address to, string calldata _name, string calldata _description)
-        public
-        onlyOwner
-        returns (uint256)
-    {
+    function mint(address to, string calldata _name, string calldata _description) public onlyOwner returns (uint256) {
         if (to == address(0)) revert InvalidRecipient();
 
         uint256 tokenId = nextTokenId++;
         ownerOf[tokenId] = to;
-        balanceOf[to]++;
-        totalSupply++;
+        unchecked {
+            balanceOf[to]++;
+            totalSupply++;
+        }
 
-        // Set metadata with empty image (will use baseImageURI)
-        tokenData[tokenId] = TokenData({name: _name, description: _description, image: "", createdAt: block.timestamp});
-
-        // Generate random traits
+        tokenData[tokenId] = TokenData({name: _name, description: _description, createdAt: block.timestamp});
         tokenTraits[tokenId] = _generateTraits(tokenId);
 
         emit Transfer(address(0), to, tokenId);
@@ -534,20 +513,32 @@ contract SocialNFT {
     // ============ Metadata Functions ============
 
     /**
-     * @notice Get token URI (returns baseImageURI + tokenId or custom image)
+     * @notice Get token URI with on-chain metadata
      * @param tokenId Token ID
-     * @return Token URI string
+     * @return Token URI string (data URI with JSON metadata)
      */
     function tokenURI(uint256 tokenId) public view returns (string memory) {
         if (ownerOf[tokenId] == address(0)) revert TokenNotExist();
+        TokenData storage data = tokenData[tokenId];
+        return _generateOnChainMetadata(tokenId, data);
+    }
 
-        TokenData memory data = tokenData[tokenId];
-
-        // Return custom image if set, otherwise baseImageURI + tokenId
-        if (bytes(data.image).length > 0) {
-            return data.image;
-        }
-        return string(abi.encodePacked(baseImageURI, _toString(tokenId)));
+    function _generateOnChainMetadata(uint256 tokenId, TokenData storage data) internal view returns (string memory) {
+        TokenTraits storage traits = tokenTraits[tokenId];
+        uint256 driftCount = _driftHistory[tokenId].length;
+        return INFTMetadata(METADATA_CONTRACT)
+            .generateMetadata(
+                name,
+                data.name,
+                data.description,
+                externalURL,
+                traits.rarity,
+                traits.background,
+                traits.pattern,
+                traits.glow,
+                traits.luckyNumber,
+                driftCount
+            );
     }
 
     /**
@@ -586,28 +577,18 @@ contract SocialNFT {
             )
         );
 
-        // Rarity distribution
+        // Rarity distribution: Common 70%, Rare 20%, Legendary 8%, Epic 2%
         uint8 rarity;
         uint256 roll = seed % 100;
-        if (roll < 1) {
-            rarity = RARITY_MYTHIC;
+        if (roll < 2) {
+            rarity = RARITY_EPIC; // 2%
+        } else if (roll < 10) {
+            rarity = RARITY_LEGENDARY; // 8%
+        } else if (roll < 30) {
+            rarity = RARITY_RARE; // 20%
+        } else {
+            rarity = RARITY_COMMON; // 70%
         }
-        // 1%
-        else if (roll < 5) {
-            rarity = RARITY_LEGENDARY;
-        }
-        // 4%
-        else if (roll < 15) {
-            rarity = RARITY_RARE;
-        }
-        // 10%
-        else if (roll < 40) {
-            rarity = RARITY_UNCOMMON;
-        }
-        // 25%
-        else {
-            rarity = RARITY_COMMON;
-        } // 60%
 
         return TokenTraits({
             rarity: rarity,
