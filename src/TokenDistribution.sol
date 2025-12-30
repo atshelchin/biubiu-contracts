@@ -42,6 +42,19 @@ contract TokenDistribution {
     uint8 public constant TOKEN_TYPE_ERC721 = 2;
     uint8 public constant TOKEN_TYPE_ERC1155 = 3;
 
+    // Usage types
+    uint8 public constant USAGE_FREE = 0;
+    uint8 public constant USAGE_PREMIUM = 1;
+    uint8 public constant USAGE_PAID = 2;
+
+    // Statistics
+    uint256 public totalFreeUsage;
+    uint256 public totalPremiumUsage;
+    uint256 public totalPaidUsage;
+    uint256 public totalFreeAuthUsage;
+    uint256 public totalPremiumAuthUsage;
+    uint256 public totalPaidAuthUsage;
+
     // EIP-712 Domain
     bytes32 public constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -106,10 +119,10 @@ contract TokenDistribution {
         uint8 tokenType,
         uint256 recipientCount,
         uint256 totalAmount,
-        bool isPremium
+        uint8 usageType
     );
     event DistributedWithAuth(
-        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount
+        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount, uint8 usageType
     );
     event TransferSkipped(address indexed recipient, uint256 value, bytes reason);
     event Refunded(address indexed to, uint256 amount);
@@ -129,7 +142,7 @@ contract TokenDistribution {
         _locked = 0;
     }
 
-    /// @notice Self-execute distribution (owner sends transaction)
+    /// @notice Self-execute distribution (owner sends transaction) - paid version
     /// @param token Token address (address(0) for native ETH)
     /// @param tokenType Token type (0=WETH not allowed here, 1=ERC20, 2=ERC721, 3=ERC1155)
     /// @param tokenId ERC1155 token ID (0 for others)
@@ -147,17 +160,53 @@ contract TokenDistribution {
         uint256 len = recipients.length;
         if (len == 0 || len > MAX_BATCH_SIZE) revert BatchTooLarge();
 
-        // Check premium status
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
+        // Check premium status and collect fee
+        (uint8 usageType, uint256 availableETH) = _checkAndCollectFeeForDistribute(msg.value, referrer);
 
-        // Collect fee if not premium
-        uint256 availableETH = msg.value;
-        if (!isPremium) {
-            if (availableETH < NON_MEMBER_FEE) revert InsufficientPayment();
-            availableETH -= NON_MEMBER_FEE;
-            _collectFee(NON_MEMBER_FEE, referrer);
-        }
+        // Execute distribution
+        (totalDistributed, failed) = _executeDistribute(token, tokenType, tokenId, recipients, availableETH);
 
+        // Refund unused ETH
+        _refundETH(msg.sender);
+
+        emit Distributed(msg.sender, token, tokenType, len, totalDistributed, usageType);
+    }
+
+    /// @notice Self-execute distribution (free version)
+    /// @param token Token address (address(0) for native ETH)
+    /// @param tokenType Token type (0=WETH not allowed here, 1=ERC20, 2=ERC721, 3=ERC1155)
+    /// @param tokenId ERC1155 token ID (0 for others)
+    /// @param recipients List of recipients (max 100)
+    /// @return totalDistributed Total amount successfully distributed
+    /// @return failed Array of failed transfers with details (address, value, reason)
+    function distributeFree(
+        address token,
+        uint8 tokenType,
+        uint256 tokenId,
+        Recipient[] calldata recipients
+    ) external payable nonReentrant returns (uint256 totalDistributed, FailedTransfer[] memory failed) {
+        uint256 len = recipients.length;
+        if (len == 0 || len > MAX_BATCH_SIZE) revert BatchTooLarge();
+
+        totalFreeUsage++;
+
+        // Execute distribution with full msg.value available
+        (totalDistributed, failed) = _executeDistribute(token, tokenType, tokenId, recipients, msg.value);
+
+        // Refund unused ETH
+        _refundETH(msg.sender);
+
+        emit Distributed(msg.sender, token, tokenType, len, totalDistributed, USAGE_FREE);
+    }
+
+    /// @dev Internal function to execute distribution
+    function _executeDistribute(
+        address token,
+        uint8 tokenType,
+        uint256 tokenId,
+        Recipient[] calldata recipients,
+        uint256 availableETH
+    ) internal returns (uint256 totalDistributed, FailedTransfer[] memory failed) {
         if (token == address(0)) {
             // Native ETH distribution
             (totalDistributed, failed) = _distributeETH(recipients, availableETH);
@@ -170,19 +219,30 @@ contract TokenDistribution {
         } else {
             revert InvalidTokenType();
         }
-
-        // Refund unused ETH
-        uint256 remainingETH = address(this).balance;
-        if (remainingETH > 0) {
-            (bool success,) = payable(msg.sender).call{value: remainingETH}("");
-            if (!success) revert RefundFailed();
-            emit Refunded(msg.sender, remainingETH);
-        }
-
-        emit Distributed(msg.sender, token, tokenType, len, totalDistributed, isPremium);
     }
 
-    /// @notice Delegated execute distribution (executor sends transaction on behalf of owner)
+    /// @dev Check premium status and collect fee for distribute
+    function _checkAndCollectFeeForDistribute(uint256 msgValue, address referrer) internal returns (uint8 usageType, uint256 availableETH) {
+        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
+
+        availableETH = msgValue;
+
+        if (isPremium) {
+            totalPremiumUsage++;
+            return (USAGE_PREMIUM, availableETH);
+        }
+
+        // Non-member must pay
+        if (availableETH < NON_MEMBER_FEE) revert InsufficientPayment();
+        availableETH -= NON_MEMBER_FEE;
+
+        totalPaidUsage++;
+        _collectFee(NON_MEMBER_FEE, referrer);
+
+        return (USAGE_PAID, availableETH);
+    }
+
+    /// @notice Delegated execute distribution (executor sends transaction on behalf of owner) - paid version
     /// @param auth Authorization struct signed by owner
     /// @param signature Owner's EIP-712 signature
     /// @param batchId Batch number to execute
@@ -201,41 +261,93 @@ contract TokenDistribution {
         uint8[] calldata proofLengths,
         address referrer
     ) external payable nonReentrant returns (uint256 batchAmount, FailedTransfer[] memory failed) {
-        // Validate, verify signature, and update state in one call to reduce stack depth
-        address signer =
-            _validateVerifyAndUpdate(auth, signature, batchId, recipients.length, proofLengths.length, referrer);
+        // Validate and verify signature
+        address signer = _validateAndVerifyAuth(auth, signature, batchId, recipients.length, proofLengths.length);
 
-        // Verify Merkle proofs
-        _verifyMerkleProofs(auth.merkleRoot, batchId, recipients, proofs, proofLengths);
+        // Check premium status and collect fee
+        uint8 usageType = _checkPremiumAndCollectFeeForAuth(signer, referrer);
 
-        // Execute distribution and finalize
-        (batchAmount, failed) = _executeAndFinalize(auth, signer, batchId, recipients);
+        // Execute distribution with auth
+        (batchAmount, failed) = _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, usageType);
     }
 
-    function _validateVerifyAndUpdate(
+    /// @notice Delegated execute distribution (free version)
+    /// @param auth Authorization struct signed by owner
+    /// @param signature Owner's EIP-712 signature
+    /// @param batchId Batch number to execute
+    /// @param recipients Recipients for this batch
+    /// @param proofs Flattened Merkle proofs for all recipients
+    /// @param proofLengths Length of each recipient's proof
+    /// @return batchAmount Total amount successfully distributed in this batch
+    /// @return failed Array of failed transfers with details (address, value, reason)
+    function distributeWithAuthFree(
+        DistributionAuth calldata auth,
+        bytes calldata signature,
+        uint256 batchId,
+        Recipient[] calldata recipients,
+        bytes32[] calldata proofs,
+        uint8[] calldata proofLengths
+    ) external payable nonReentrant returns (uint256 batchAmount, FailedTransfer[] memory failed) {
+        // Validate and verify signature
+        address signer = _validateAndVerifyAuth(auth, signature, batchId, recipients.length, proofLengths.length);
+
+        totalFreeAuthUsage++;
+
+        // Execute distribution with auth
+        (batchAmount, failed) = _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, USAGE_FREE);
+    }
+
+    /// @dev Validate inputs and verify signature
+    function _validateAndVerifyAuth(
         DistributionAuth calldata auth,
         bytes calldata signature,
         uint256 batchId,
         uint256 recipientsLen,
-        uint256 proofLengthsLen,
-        address referrer
-    ) internal returns (address signer) {
+        uint256 proofLengthsLen
+    ) internal view returns (address signer) {
         _validateAuthInputs(auth, batchId, recipientsLen, proofLengthsLen);
         signer = _verifySignature(auth, signature);
-        _checkPremiumAndCollectFee(signer, referrer);
-        _updateBatchState(auth.uuid, batchId, auth.totalBatches);
     }
 
-    function _executeAndFinalize(
+    /// @dev Execute distribution with auth
+    function _executeDistributeWithAuth(
         DistributionAuth calldata auth,
         address signer,
         uint256 batchId,
-        Recipient[] calldata recipients
+        Recipient[] calldata recipients,
+        bytes32[] calldata proofs,
+        uint8[] calldata proofLengths,
+        uint8 usageType
     ) internal returns (uint256 batchAmount, FailedTransfer[] memory failed) {
-        (batchAmount, failed) = _executeDistribution(auth, signer, recipients);
+        _updateBatchState(auth.uuid, batchId, auth.totalBatches);
+
+        // Verify Merkle proofs
+        _verifyMerkleProofs(auth.merkleRoot, batchId, recipients, proofs, proofLengths);
+
+        // Execute distribution
+        (batchAmount, failed) = _executeDistributionByType(auth, signer, recipients);
         distributedAmount[auth.uuid] += batchAmount;
+
         _refundETH(signer);
-        emit DistributedWithAuth(auth.uuid, signer, batchId, recipients.length, batchAmount);
+        emit DistributedWithAuth(auth.uuid, signer, batchId, recipients.length, batchAmount, usageType);
+    }
+
+    /// @dev Check premium status and collect fee for auth distribution
+    function _checkPremiumAndCollectFeeForAuth(address signer, address referrer) internal returns (uint8 usageType) {
+        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(signer);
+
+        if (isPremium) {
+            totalPremiumAuthUsage++;
+            return USAGE_PREMIUM;
+        }
+
+        // Non-member must pay
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+
+        totalPaidAuthUsage++;
+        _collectFee(NON_MEMBER_FEE, referrer);
+
+        return USAGE_PAID;
     }
 
     function _validateAuthInputs(
@@ -251,13 +363,6 @@ contract TokenDistribution {
         if (proofLengthsLen != recipientsLen) revert InvalidProof();
     }
 
-    function _checkPremiumAndCollectFee(address signer, address referrer) internal {
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(signer);
-        if (!isPremium) {
-            if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
-            _collectFee(NON_MEMBER_FEE, referrer);
-        }
-    }
 
     function _updateBatchState(bytes32 uuid, uint256 batchId, uint256 _totalBatches) internal {
         batchExecuted[uuid][batchId] = true;
@@ -267,7 +372,7 @@ contract TokenDistribution {
         }
     }
 
-    function _executeDistribution(DistributionAuth calldata auth, address signer, Recipient[] calldata recipients)
+    function _executeDistributionByType(DistributionAuth calldata auth, address signer, Recipient[] calldata recipients)
         internal
         returns (uint256 batchAmount, FailedTransfer[] memory failed)
     {
@@ -288,9 +393,8 @@ contract TokenDistribution {
         uint256 remainingETH = address(this).balance;
         if (remainingETH > 0) {
             (bool success,) = payable(to).call{value: remainingETH}("");
-            if (success) {
-                emit Refunded(to, remainingETH);
-            }
+            if (!success) revert RefundFailed();
+            emit Refunded(to, remainingETH);
         }
     }
 

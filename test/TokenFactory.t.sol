@@ -17,7 +17,8 @@ contract TokenFactoryTest is Test {
         string symbol,
         uint8 decimals,
         uint256 initialSupply,
-        bool mintable
+        bool mintable,
+        uint8 usageType
     );
 
     function setUp() public {
@@ -29,7 +30,7 @@ contract TokenFactoryTest is Test {
     function test_CreateTokenBasic() public {
         vm.startPrank(alice);
 
-        address tokenAddress = factory.createToken("My Token", "MTK", 18, 1000 ether, false);
+        address tokenAddress = factory.createTokenFree("My Token", "MTK", 18, 1000 ether, false);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -47,7 +48,7 @@ contract TokenFactoryTest is Test {
     function test_CreateTokenWithMintable() public {
         vm.startPrank(alice);
 
-        address tokenAddress = factory.createToken("Mintable Token", "MINT", 18, 1000 ether, true);
+        address tokenAddress = factory.createTokenFree("Mintable Token", "MINT", 18, 1000 ether, true);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -64,7 +65,7 @@ contract TokenFactoryTest is Test {
     function test_CreateTokenZeroSupply() public {
         vm.startPrank(alice);
 
-        address tokenAddress = factory.createToken("Zero Token", "ZERO", 18, 0, true);
+        address tokenAddress = factory.createTokenFree("Zero Token", "ZERO", 18, 0, true);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -81,7 +82,7 @@ contract TokenFactoryTest is Test {
     function test_CreateTokenCustomDecimals() public {
         vm.startPrank(alice);
 
-        address tokenAddress = factory.createToken("USDC Clone", "USDC", 6, 1000000 * 1e6, false);
+        address tokenAddress = factory.createTokenFree("USDC Clone", "USDC", 6, 1000000 * 1e6, false);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -95,9 +96,9 @@ contract TokenFactoryTest is Test {
         vm.startPrank(alice);
 
         vm.expectEmit(false, true, false, false);
-        emit TokenCreated(address(0), alice, "Test", "TST", 18, 1000 ether, true);
+        emit TokenCreated(address(0), alice, "Test", "TST", 18, 1000 ether, true, 0);
 
-        factory.createToken("Test", "TST", 18, 1000 ether, true);
+        factory.createTokenFree("Test", "TST", 18, 1000 ether, true);
 
         vm.stopPrank();
     }
@@ -106,7 +107,7 @@ contract TokenFactoryTest is Test {
         vm.startPrank(alice);
 
         vm.expectRevert("TokenFactory: name cannot be empty");
-        factory.createToken("", "TST", 18, 1000 ether, false);
+        factory.createTokenFree("", "TST", 18, 1000 ether, false);
 
         vm.stopPrank();
     }
@@ -115,7 +116,7 @@ contract TokenFactoryTest is Test {
         vm.startPrank(alice);
 
         vm.expectRevert("TokenFactory: symbol cannot be empty");
-        factory.createToken("Test", "", 18, 1000 ether, false);
+        factory.createTokenFree("Test", "", 18, 1000 ether, false);
 
         vm.stopPrank();
     }
@@ -123,11 +124,11 @@ contract TokenFactoryTest is Test {
     function test_CreateTokenSameNameAllowedDifferentCreators() public {
         // Alice creates "My Token"
         vm.prank(alice);
-        address token1 = factory.createToken("My Token", "MTK1", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("My Token", "MTK1", 18, 1000 ether, false);
 
         // Bob can also create "My Token" (different creator = different salt)
         vm.prank(bob);
-        address token2 = factory.createToken("My Token", "MTK2", 18, 2000 ether, false);
+        address token2 = factory.createTokenFree("My Token", "MTK2", 18, 2000 ether, false);
 
         // Both should exist
         assertFalse(token1 == token2);
@@ -139,11 +140,11 @@ contract TokenFactoryTest is Test {
 
     function test_CreateTokenSameSymbolAllowed() public {
         vm.prank(alice);
-        address token1 = factory.createToken("Token One", "MTK", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("Token One", "MTK", 18, 1000 ether, false);
 
         // Should allow creating another token with same symbol but different name
         vm.prank(bob);
-        address token2 = factory.createToken("Token Two", "MTK", 18, 2000 ether, false);
+        address token2 = factory.createTokenFree("Token Two", "MTK", 18, 2000 ether, false);
 
         // Both should exist with same symbol
         assertFalse(token1 == token2);
@@ -157,11 +158,11 @@ contract TokenFactoryTest is Test {
         vm.startPrank(alice);
 
         // Alice creates "My Token"
-        factory.createToken("My Token", "MTK", 18, 1000 ether, false);
+        factory.createTokenFree("My Token", "MTK", 18, 1000 ether, false);
 
         // Alice tries to create identical token - should revert (same salt + same bytecode)
         vm.expectRevert();
-        factory.createToken("My Token", "MTK", 18, 1000 ether, false);
+        factory.createTokenFree("My Token", "MTK", 18, 1000 ether, false);
 
         vm.stopPrank();
     }
@@ -170,10 +171,10 @@ contract TokenFactoryTest is Test {
         vm.startPrank(alice);
 
         // Alice creates "My Token" with MTK
-        address token1 = factory.createToken("My Token", "MTK", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("My Token", "MTK", 18, 1000 ether, false);
 
         // Alice can create "My Token" with different params (different bytecode)
-        address token2 = factory.createToken("My Token", "MTK2", 18, 2000 ether, true);
+        address token2 = factory.createTokenFree("My Token", "MTK2", 18, 2000 ether, true);
 
         // Both should exist
         assertFalse(token1 == token2);
@@ -189,7 +190,7 @@ contract TokenFactoryTest is Test {
 
         // Deploy token
         vm.prank(alice);
-        address actual = factory.createToken("My Token", "MTK", 18, 1000 ether, false);
+        address actual = factory.createTokenFree("My Token", "MTK", 18, 1000 ether, false);
 
         // Should match
         assertEq(predicted, actual);
@@ -211,10 +212,10 @@ contract TokenFactoryTest is Test {
 
     function test_TrackAllTokens() public {
         vm.prank(alice);
-        address token1 = factory.createToken("Token1", "TK1", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
 
         vm.prank(bob);
-        address token2 = factory.createToken("Token2", "TK2", 18, 2000 ether, false);
+        address token2 = factory.createTokenFree("Token2", "TK2", 18, 2000 ether, false);
 
         assertEq(factory.allTokensLength(), 2);
 
@@ -227,13 +228,13 @@ contract TokenFactoryTest is Test {
     function test_TrackUserTokens() public {
         vm.startPrank(alice);
 
-        address token1 = factory.createToken("Token1", "TK1", 18, 1000 ether, false);
-        address token2 = factory.createToken("Token2", "TK2", 18, 2000 ether, false);
+        address token1 = factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
+        address token2 = factory.createTokenFree("Token2", "TK2", 18, 2000 ether, false);
 
         vm.stopPrank();
 
         vm.prank(bob);
-        address token3 = factory.createToken("Token3", "TK3", 18, 3000 ether, false);
+        address token3 = factory.createTokenFree("Token3", "TK3", 18, 3000 ether, false);
 
         // Check alice's tokens
         assertEq(factory.userTokensLength(alice), 2);
@@ -253,7 +254,7 @@ contract TokenFactoryTest is Test {
 
     function test_TokenTransfer() public {
         vm.prank(alice);
-        address tokenAddress = factory.createToken("Test", "TST", 18, 1000 ether, false);
+        address tokenAddress = factory.createTokenFree("Test", "TST", 18, 1000 ether, false);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -269,7 +270,7 @@ contract TokenFactoryTest is Test {
 
     function test_TokenApproveAndTransferFrom() public {
         vm.prank(alice);
-        address tokenAddress = factory.createToken("Test", "TST", 18, 1000 ether, false);
+        address tokenAddress = factory.createTokenFree("Test", "TST", 18, 1000 ether, false);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -289,7 +290,7 @@ contract TokenFactoryTest is Test {
 
     function test_MintOnlyOwner() public {
         vm.prank(alice);
-        address tokenAddress = factory.createToken("Test", "TST", 18, 1000 ether, true);
+        address tokenAddress = factory.createTokenFree("Test", "TST", 18, 1000 ether, true);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -309,7 +310,7 @@ contract TokenFactoryTest is Test {
 
     function test_MintNotMintableReverts() public {
         vm.prank(alice);
-        address tokenAddress = factory.createToken("Test", "TST", 18, 1000 ether, false);
+        address tokenAddress = factory.createTokenFree("Test", "TST", 18, 1000 ether, false);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -321,7 +322,7 @@ contract TokenFactoryTest is Test {
 
     function test_MintZeroAmountReverts() public {
         vm.prank(alice);
-        address tokenAddress = factory.createToken("Test", "TST", 18, 1000 ether, true);
+        address tokenAddress = factory.createTokenFree("Test", "TST", 18, 1000 ether, true);
 
         SimpleToken token = SimpleToken(tokenAddress);
 
@@ -336,13 +337,13 @@ contract TokenFactoryTest is Test {
     function test_MultipleUsersCreateTokens() public {
         // Alice creates 2 tokens
         vm.startPrank(alice);
-        factory.createToken("Alice Token 1", "AT1", 18, 1000 ether, false);
-        factory.createToken("Alice Token 2", "AT2", 6, 1000000 * 1e6, true);
+        factory.createTokenFree("Alice Token 1", "AT1", 18, 1000 ether, false);
+        factory.createTokenFree("Alice Token 2", "AT2", 6, 1000000 * 1e6, true);
         vm.stopPrank();
 
         // Bob creates 1 token
         vm.prank(bob);
-        factory.createToken("Bob Token", "BT", 18, 5000 ether, true);
+        factory.createTokenFree("Bob Token", "BT", 18, 5000 ether, true);
 
         // Check totals
         assertEq(factory.allTokensLength(), 3);
@@ -355,11 +356,11 @@ contract TokenFactoryTest is Test {
     function test_GetUserTokensPaginated() public {
         // Alice creates 5 tokens
         vm.startPrank(alice);
-        address token1 = factory.createToken("Token1", "TK1", 18, 1000 ether, false);
-        address token2 = factory.createToken("Token2", "TK2", 18, 1000 ether, false);
-        address token3 = factory.createToken("Token3", "TK3", 18, 1000 ether, false);
-        address token4 = factory.createToken("Token4", "TK4", 18, 1000 ether, false);
-        address token5 = factory.createToken("Token5", "TK5", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
+        address token2 = factory.createTokenFree("Token2", "TK2", 18, 1000 ether, false);
+        address token3 = factory.createTokenFree("Token3", "TK3", 18, 1000 ether, false);
+        address token4 = factory.createTokenFree("Token4", "TK4", 18, 1000 ether, false);
+        address token5 = factory.createTokenFree("Token5", "TK5", 18, 1000 ether, false);
         vm.stopPrank();
 
         // Get first 2 tokens (offset=0, limit=2)
@@ -385,7 +386,7 @@ contract TokenFactoryTest is Test {
 
     function test_GetUserTokensPaginatedOffsetTooLarge() public {
         vm.prank(alice);
-        factory.createToken("Token1", "TK1", 18, 1000 ether, false);
+        factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
 
         // Offset beyond total
         (address[] memory tokens, uint256 total) = factory.getUserTokensPaginated(alice, 10, 5);
@@ -403,13 +404,13 @@ contract TokenFactoryTest is Test {
     function test_GetAllTokensPaginated() public {
         // Create multiple tokens from different users
         vm.prank(alice);
-        address token1 = factory.createToken("Token1", "TK1", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
 
         vm.prank(bob);
-        address token2 = factory.createToken("Token2", "TK2", 18, 1000 ether, false);
+        address token2 = factory.createTokenFree("Token2", "TK2", 18, 1000 ether, false);
 
         vm.prank(alice);
-        address token3 = factory.createToken("Token3", "TK3", 18, 1000 ether, false);
+        address token3 = factory.createTokenFree("Token3", "TK3", 18, 1000 ether, false);
 
         // Get first 2 tokens
         (address[] memory tokens, uint256 total) = factory.getAllTokensPaginated(0, 2);
@@ -427,8 +428,8 @@ contract TokenFactoryTest is Test {
 
     function test_GetAllTokensPaginatedLargeLimit() public {
         vm.startPrank(alice);
-        address token1 = factory.createToken("Token1", "TK1", 18, 1000 ether, false);
-        address token2 = factory.createToken("Token2", "TK2", 18, 1000 ether, false);
+        address token1 = factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
+        address token2 = factory.createTokenFree("Token2", "TK2", 18, 1000 ether, false);
         vm.stopPrank();
 
         // Limit larger than total
@@ -443,7 +444,7 @@ contract TokenFactoryTest is Test {
 
     function test_GetTokenInfo() public {
         vm.prank(alice);
-        address tokenAddress = factory.createToken("My Token", "MTK", 18, 1000 ether, true);
+        address tokenAddress = factory.createTokenFree("My Token", "MTK", 18, 1000 ether, true);
 
         TokenFactory.TokenInfo memory info = factory.getTokenInfo(tokenAddress);
 
@@ -459,9 +460,9 @@ contract TokenFactoryTest is Test {
     function test_GetUserTokensInfoPaginated() public {
         // Alice creates 3 tokens
         vm.startPrank(alice);
-        factory.createToken("Token1", "TK1", 18, 1000 ether, false);
-        factory.createToken("Token2", "TK2", 6, 2000000, true);
-        factory.createToken("Token3", "TK3", 9, 500 ether, false);
+        factory.createTokenFree("Token1", "TK1", 18, 1000 ether, false);
+        factory.createTokenFree("Token2", "TK2", 6, 2000000, true);
+        factory.createTokenFree("Token3", "TK3", 9, 500 ether, false);
         vm.stopPrank();
 
         // Get first 2 tokens with info
@@ -497,10 +498,10 @@ contract TokenFactoryTest is Test {
     function test_GetAllTokensInfoPaginated() public {
         // Multiple users create tokens
         vm.prank(alice);
-        factory.createToken("Alice Token", "AT", 18, 1000 ether, false);
+        factory.createTokenFree("Alice Token", "AT", 18, 1000 ether, false);
 
         vm.prank(bob);
-        factory.createToken("Bob Token", "BT", 6, 500000, true);
+        factory.createTokenFree("Bob Token", "BT", 6, 500000, true);
 
         // Get all tokens with info
         (TokenFactory.TokenInfo[] memory tokenInfos, uint256 total) = factory.getAllTokensInfoPaginated(0, 10);
@@ -538,7 +539,7 @@ contract TokenFactoryTest is Test {
         vm.assume(decimals <= 18);
 
         vm.prank(alice);
-        address tokenAddress = factory.createToken(name, symbol, decimals, initialSupply, mintable);
+        address tokenAddress = factory.createTokenFree(name, symbol, decimals, initialSupply, mintable);
 
         SimpleToken token = SimpleToken(tokenAddress);
 

@@ -64,7 +64,7 @@ contract NFTFactoryTest is Test {
 
     function test_CreateERC721Basic() public {
         vm.prank(alice);
-        address nftAddr = factory.createERC721("My NFT", "MNFT", "ipfs://base/", true, false, address(0), 0);
+        address nftAddr = factory.createERC721Free("My NFT", "MNFT", "ipfs://base/", true, false, address(0), 0);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
         assertEq(nft.name(), "My NFT");
@@ -76,7 +76,7 @@ contract NFTFactoryTest is Test {
         // Alice creates NFT with stake-to-mint
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 1000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -96,7 +96,7 @@ contract NFTFactoryTest is Test {
         // Create and mint
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 1000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -118,7 +118,7 @@ contract NFTFactoryTest is Test {
     function test_ERC721MultipleStakeAndRedeem() public {
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 500 ether);
+            factory.createERC721Free("Meme NFT", "MEME", "ipfs://meme/", true, true, address(memeToken), 500 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -144,7 +144,7 @@ contract NFTFactoryTest is Test {
 
     function test_ERC721StakeToMintNotEnabled() public {
         vm.prank(alice);
-        address nftAddr = factory.createERC721("Regular NFT", "REG", "ipfs://reg/", true, false, address(0), 0);
+        address nftAddr = factory.createERC721Free("Regular NFT", "REG", "ipfs://reg/", true, false, address(0), 0);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -158,8 +158,8 @@ contract NFTFactoryTest is Test {
 
     function test_TrackUserNFTs() public {
         vm.startPrank(alice);
-        address nft1 = factory.createERC721("NFT1", "N1", "ipfs://1/", true, false, address(0), 0);
-        address nft2 = factory.createERC721("NFT2", "N2", "ipfs://2/", true, false, address(0), 0);
+        address nft1 = factory.createERC721Free("NFT1", "N1", "ipfs://1/", true, false, address(0), 0);
+        address nft2 = factory.createERC721Free("NFT2", "N2", "ipfs://2/", true, false, address(0), 0);
         vm.stopPrank();
 
         address[] memory aliceNFTs = factory.getUserNFTs(alice);
@@ -173,7 +173,7 @@ contract NFTFactoryTest is Test {
     function test_GetNFTInfo() public {
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("InfoNFT", "INFO", "ipfs://info/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("InfoNFT", "INFO", "ipfs://info/", true, true, address(memeToken), 1000 ether);
 
         NFTFactory.NFTInfo memory info = factory.getNFTInfo(nftAddr);
 
@@ -189,7 +189,7 @@ contract NFTFactoryTest is Test {
         // Alice creates 5 NFTs
         vm.startPrank(alice);
         for (uint256 i = 0; i < 5; i++) {
-            factory.createERC721(
+            factory.createERC721Free(
                 string(abi.encodePacked("NFT", _toString(i))),
                 string(abi.encodePacked("N", _toString(i))),
                 "ipfs://test/",
@@ -225,9 +225,9 @@ contract NFTFactoryTest is Test {
     function test_PaginationUserNFTsInfo() public {
         // Alice creates 3 NFTs
         vm.startPrank(alice);
-        factory.createERC721("NFT0", "N0", "ipfs://0/", true, false, address(0), 0);
-        factory.createERC721("NFT1", "N1", "ipfs://1/", true, true, address(memeToken), 100 ether);
-        factory.createERC721("NFT2", "N2", "ipfs://2/", true, false, address(0), 0);
+        factory.createERC721Free("NFT0", "N0", "ipfs://0/", true, false, address(0), 0);
+        factory.createERC721Free("NFT1", "N1", "ipfs://1/", true, true, address(memeToken), 100 ether);
+        factory.createERC721Free("NFT2", "N2", "ipfs://2/", true, false, address(0), 0);
         vm.stopPrank();
 
         (NFTFactory.NFTInfo[] memory infos, uint256 total) = factory.getUserNFTsInfoPaginated(alice, 0, 10);
@@ -245,14 +245,14 @@ contract NFTFactoryTest is Test {
     function test_PaginationAllNFTs() public {
         // Alice creates 2, Bob creates 3
         vm.startPrank(alice);
-        factory.createERC721("Alice1", "A1", "ipfs://a1/", true, false, address(0), 0);
-        factory.createERC721("Alice2", "A2", "ipfs://a2/", true, false, address(0), 0);
+        factory.createERC721Free("Alice1", "A1", "ipfs://a1/", true, false, address(0), 0);
+        factory.createERC721Free("Alice2", "A2", "ipfs://a2/", true, false, address(0), 0);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        factory.createERC721("Bob1", "B1", "ipfs://b1/", true, false, address(0), 0);
-        factory.createERC721("Bob2", "B2", "ipfs://b2/", true, false, address(0), 0);
-        factory.createERC721("Bob3", "B3", "ipfs://b3/", true, false, address(0), 0);
+        factory.createERC721Free("Bob1", "B1", "ipfs://b1/", true, false, address(0), 0);
+        factory.createERC721Free("Bob2", "B2", "ipfs://b2/", true, false, address(0), 0);
+        factory.createERC721Free("Bob3", "B3", "ipfs://b3/", true, false, address(0), 0);
         vm.stopPrank();
 
         (address[] memory allNFTs, uint256 total) = factory.getAllNFTsPaginated(0, 3);
@@ -290,7 +290,7 @@ contract NFTFactoryTest is Test {
         // Alice creates NFT with stake-to-mint
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("StakeNFT", "SNFT", "ipfs://stake/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("StakeNFT", "SNFT", "ipfs://stake/", true, true, address(memeToken), 1000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -325,7 +325,7 @@ contract NFTFactoryTest is Test {
         // Demonstrate that NFT with stake has more value
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("ValueNFT", "VNFT", "ipfs://value/", true, true, address(memeToken), 5000 ether);
+            factory.createERC721Free("ValueNFT", "VNFT", "ipfs://value/", true, true, address(memeToken), 5000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -351,7 +351,7 @@ contract NFTFactoryTest is Test {
     function test_MultipleTransfersPreserveStake() public {
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("MultiNFT", "MNFT", "ipfs://multi/", true, true, address(memeToken), 2000 ether);
+            factory.createERC721Free("MultiNFT", "MNFT", "ipfs://multi/", true, true, address(memeToken), 2000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -381,7 +381,7 @@ contract NFTFactoryTest is Test {
     function test_BobCannotRedeemAfterTransfer() public {
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("NoRedeemNFT", "NR", "ipfs://nr/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("NoRedeemNFT", "NR", "ipfs://nr/", true, true, address(memeToken), 1000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -407,7 +407,7 @@ contract NFTFactoryTest is Test {
     function test_CanRedeemFunction() public {
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("RedeemCheck", "RC", "ipfs://rc/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("RedeemCheck", "RC", "ipfs://rc/", true, true, address(memeToken), 1000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -432,7 +432,7 @@ contract NFTFactoryTest is Test {
     function test_TransferPreservesRedeemability() public {
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("TransferRedeem", "TR", "ipfs://tr/", true, true, address(memeToken), 500 ether);
+            factory.createERC721Free("TransferRedeem", "TR", "ipfs://tr/", true, true, address(memeToken), 500 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -459,7 +459,7 @@ contract NFTFactoryTest is Test {
         // Simulate pump.fun style game
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("PumpNFT", "PUMP", "ipfs://pump/", true, true, address(memeToken), 1000 ether);
+            factory.createERC721Free("PumpNFT", "PUMP", "ipfs://pump/", true, true, address(memeToken), 1000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 
@@ -493,7 +493,7 @@ contract NFTFactoryTest is Test {
         // Demonstrate price support mechanism
         vm.prank(alice);
         address nftAddr =
-            factory.createERC721("Support NFT", "SUP", "ipfs://sup/", true, true, address(memeToken), 10000 ether);
+            factory.createERC721Free("Support NFT", "SUP", "ipfs://sup/", true, true, address(memeToken), 10000 ether);
 
         SimpleERC721 nft = SimpleERC721(nftAddr);
 

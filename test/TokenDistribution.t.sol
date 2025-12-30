@@ -117,10 +117,10 @@ contract TokenDistributionTest is Test {
         uint8 tokenType,
         uint256 recipientCount,
         uint256 totalAmount,
-        bool isPremium
+        uint8 usageType
     );
     event DistributedWithAuth(
-        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount
+        bytes32 indexed uuid, address indexed signer, uint256 batchId, uint256 recipientCount, uint256 batchAmount, uint8 usageType
     );
     event TransferSkipped(address indexed recipient, uint256 value, bytes reason);
     event Refunded(address indexed to, uint256 amount);
@@ -945,7 +945,7 @@ contract TokenDistributionTest is Test {
         TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
 
         vm.expectEmit(true, true, false, true);
-        emit Distributed(alice, address(0), 0, 2, 2 ether, true);
+        emit Distributed(alice, address(0), 0, 2, 2 ether, 1); // usageType = 1 = USAGE_PREMIUM
 
         vm.prank(alice);
         distribution.distribute{value: 2 ether}(address(0), 0, 0, recipients, address(0));

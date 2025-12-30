@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+interface IBiuBiuPremium {
+    function getSubscriptionInfo(address user)
+        external
+        view
+        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
+}
+
 /**
  * @title SimpleToken
  * @notice A simple ERC20 token with optional minting capability
@@ -104,6 +111,21 @@ contract SimpleToken {
  * @notice Factory contract to deploy custom ERC20 tokens
  */
 contract TokenFactory {
+    // Constants
+    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
+    address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+
+    // Usage types
+    uint8 public constant USAGE_FREE = 0;
+    uint8 public constant USAGE_PREMIUM = 1;
+    uint8 public constant USAGE_PAID = 2;
+
+    // Statistics
+    uint256 public totalFreeUsage;
+    uint256 public totalPremiumUsage;
+    uint256 public totalPaidUsage;
+
     struct TokenInfo {
         address tokenAddress;
         string name;
@@ -114,6 +136,10 @@ contract TokenFactory {
         address owner;
     }
 
+    // Errors
+    error InsufficientPayment();
+
+    // Events
     event TokenCreated(
         address indexed tokenAddress,
         address indexed creator,
@@ -121,15 +147,45 @@ contract TokenFactory {
         string symbol,
         uint8 decimals,
         uint256 initialSupply,
-        bool mintable
+        bool mintable,
+        uint8 usageType
     );
+    event ReferralPaid(address indexed referrer, address indexed payer, uint256 amount);
+    event FeePaid(address indexed payer, uint256 amount);
 
     // Track all created tokens
     address[] public allTokens;
     mapping(address => address[]) public userTokens;
 
     /**
-     * @notice Create a new ERC20 token
+     * @notice Create a new ERC20 token (paid version)
+     * @param name Token name
+     * @param symbol Token symbol
+     * @param decimals Token decimals (usually 18)
+     * @param initialSupply Initial token supply (will be minted to creator)
+     * @param mintable Whether the token can be minted after deployment
+     * @param referrer Referrer address for fee sharing
+     * @return tokenAddress Address of the newly created token
+     */
+    function createToken(
+        string memory name,
+        string memory symbol,
+        uint8 decimals,
+        uint256 initialSupply,
+        bool mintable,
+        address referrer
+    ) external payable returns (address tokenAddress) {
+        // Check premium status and collect fee
+        uint8 usageType = _checkAndCollectFee(referrer);
+
+        // Create token
+        tokenAddress = _createToken(name, symbol, decimals, initialSupply, mintable, usageType);
+
+        return tokenAddress;
+    }
+
+    /**
+     * @notice Create a new ERC20 token (free version)
      * @param name Token name
      * @param symbol Token symbol
      * @param decimals Token decimals (usually 18)
@@ -137,10 +193,29 @@ contract TokenFactory {
      * @param mintable Whether the token can be minted after deployment
      * @return tokenAddress Address of the newly created token
      */
-    function createToken(string memory name, string memory symbol, uint8 decimals, uint256 initialSupply, bool mintable)
-        external
-        returns (address tokenAddress)
-    {
+    function createTokenFree(
+        string memory name,
+        string memory symbol,
+        uint8 decimals,
+        uint256 initialSupply,
+        bool mintable
+    ) external returns (address tokenAddress) {
+        totalFreeUsage++;
+        tokenAddress = _createToken(name, symbol, decimals, initialSupply, mintable, USAGE_FREE);
+        return tokenAddress;
+    }
+
+    /**
+     * @dev Internal function to create token
+     */
+    function _createToken(
+        string memory name,
+        string memory symbol,
+        uint8 decimals,
+        uint256 initialSupply,
+        bool mintable,
+        uint8 usageType
+    ) internal returns (address tokenAddress) {
         require(bytes(name).length > 0, "TokenFactory: name cannot be empty");
         require(bytes(symbol).length > 0, "TokenFactory: symbol cannot be empty");
 
@@ -157,9 +232,46 @@ contract TokenFactory {
         allTokens.push(tokenAddress);
         userTokens[msg.sender].push(tokenAddress);
 
-        emit TokenCreated(tokenAddress, msg.sender, name, symbol, decimals, initialSupply, mintable);
+        emit TokenCreated(tokenAddress, msg.sender, name, symbol, decimals, initialSupply, mintable, usageType);
 
         return tokenAddress;
+    }
+
+    /**
+     * @dev Check premium status and collect fee if needed
+     */
+    function _checkAndCollectFee(address referrer) internal returns (uint8 usageType) {
+        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
+
+        if (isPremium) {
+            totalPremiumUsage++;
+            return USAGE_PREMIUM;
+        }
+
+        // Non-member must pay
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+
+        totalPaidUsage++;
+
+        // Split fee with referrer (50%)
+        if (referrer != address(0) && referrer != msg.sender) {
+            uint256 referralAmount = msg.value >> 1; // 50%
+            (bool success,) = payable(referrer).call{value: referralAmount}("");
+            if (success) {
+                emit ReferralPaid(referrer, msg.sender, referralAmount);
+            }
+        }
+
+        // Transfer remaining to owner
+        uint256 ownerAmount = address(this).balance;
+        if (ownerAmount > 0) {
+            (bool success,) = payable(OWNER).call{value: ownerAmount}("");
+            if (success) {
+                emit FeePaid(msg.sender, ownerAmount);
+            }
+        }
+
+        return USAGE_PAID;
     }
 
     /**

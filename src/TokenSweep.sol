@@ -28,8 +28,20 @@ contract TokenSweep {
     IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+
+    // Usage types
+    uint8 public constant USAGE_FREE = 0;
+    uint8 public constant USAGE_PREMIUM = 1;
+    uint8 public constant USAGE_PAID = 2;
+
+    // Statistics
+    uint256 public totalFreeUsage;
+    uint256 public totalPremiumUsage;
+    uint256 public totalPaidUsage;
+
     // Reentrancy guard
     uint256 private _locked = 0;
+
     // Custom errors (gas efficient)
     error ReentrancyDetected();
     error InsufficientPayment();
@@ -45,7 +57,7 @@ contract TokenSweep {
     event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
     event ReferralPaid(address indexed referrer, address indexed caller, uint256 amount);
     event OwnerPaid(address indexed owner, address indexed caller, uint256 amount);
-    event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, bool isPremium);
+    event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, uint8 usageType);
 
     function multicall(
         Wallet[] calldata wallets,
@@ -58,35 +70,47 @@ contract TokenSweep {
         // Determine who to check for membership (caller or authorized signer)
         address checker = signature.length > 0 ? _verifyAuthorization(signature, msg.sender, recipient) : msg.sender;
 
-        // Check if checker is a premium member
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(checker);
+        // Check premium status and collect fee
+        uint8 usageType = _checkAndCollectFee(checker, referrer);
 
-        // If not premium, require payment
-        if (!isPremium) {
-            if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+        // Execute multicall
+        _executeMulticall(wallets, recipient, tokens, deadline);
 
-            // Split fee with referrer (50%)
-            if (referrer != address(0) && referrer != msg.sender) {
-                uint256 referralAmount = msg.value >> 1; // 50% using bit shift
+        emit MulticallExecuted(msg.sender, recipient, wallets.length, usageType);
+    }
 
-                // forge-lint: disable-next-line(unchecked-call)
-                (bool success,) = payable(referrer).call{value: referralAmount}("");
-                if (success) {
-                    emit ReferralPaid(referrer, msg.sender, referralAmount);
-                }
-            }
-
-            // Transfer all contract balance to owner (including current payment and any accumulated funds)
-            uint256 contractBalance = address(this).balance;
-            if (contractBalance > 0) {
-                // forge-lint: disable-next-line(unchecked-call)
-                (bool success,) = payable(OWNER).call{value: contractBalance}("");
-                if (success) {
-                    emit OwnerPaid(OWNER, msg.sender, contractBalance);
-                }
-            }
+    /**
+     * @notice Multicall free version (no payment required)
+     */
+    function multicallFree(
+        Wallet[] calldata wallets,
+        address recipient,
+        address[] calldata tokens,
+        uint256 deadline,
+        bytes calldata signature
+    ) external nonReentrant {
+        // Verify authorization if signature provided
+        if (signature.length > 0) {
+            _verifyAuthorization(signature, msg.sender, recipient);
         }
 
+        totalFreeUsage++;
+
+        // Execute multicall
+        _executeMulticall(wallets, recipient, tokens, deadline);
+
+        emit MulticallExecuted(msg.sender, recipient, wallets.length, USAGE_FREE);
+    }
+
+    /**
+     * @dev Internal function to execute multicall
+     */
+    function _executeMulticall(
+        Wallet[] calldata wallets,
+        address recipient,
+        address[] calldata tokens,
+        uint256 deadline
+    ) internal {
         unchecked {
             uint256 len = wallets.length;
             for (uint256 i; i < len; ++i) {
@@ -94,8 +118,46 @@ contract TokenSweep {
                 ITokenSweep(w.wallet).drainToAddress(recipient, tokens, deadline, w.signature);
             }
         }
+    }
 
-        emit MulticallExecuted(msg.sender, recipient, wallets.length, isPremium);
+    /**
+     * @dev Check premium status and collect fee if needed
+     */
+    function _checkAndCollectFee(address checker, address referrer) internal returns (uint8 usageType) {
+        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(checker);
+
+        if (isPremium) {
+            totalPremiumUsage++;
+            return USAGE_PREMIUM;
+        }
+
+        // Non-member must pay
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+
+        totalPaidUsage++;
+
+        // Split fee with referrer (50%)
+        if (referrer != address(0) && referrer != msg.sender) {
+            uint256 referralAmount = msg.value >> 1; // 50% using bit shift
+
+            // forge-lint: disable-next-line(unchecked-call)
+            (bool success,) = payable(referrer).call{value: referralAmount}("");
+            if (success) {
+                emit ReferralPaid(referrer, msg.sender, referralAmount);
+            }
+        }
+
+        // Transfer all contract balance to owner (including current payment and any accumulated funds)
+        uint256 contractBalance = address(this).balance;
+        if (contractBalance > 0) {
+            // forge-lint: disable-next-line(unchecked-call)
+            (bool success,) = payable(OWNER).call{value: contractBalance}("");
+            if (success) {
+                emit OwnerPaid(OWNER, msg.sender, contractBalance);
+            }
+        }
+
+        return USAGE_PAID;
     }
 
     function drainToAddress(address recipient, address[] calldata tokens, uint256 deadline, bytes calldata signature)

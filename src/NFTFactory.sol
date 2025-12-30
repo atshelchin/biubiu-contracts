@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+interface IBiuBiuPremium {
+    function getSubscriptionInfo(address user)
+        external
+        view
+        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
+}
+
 /**
  * @title IERC20
  * @notice Minimal ERC20 interface for staking
@@ -247,6 +254,21 @@ contract SimpleERC721 {
  * @notice Factory to deploy ERC721 NFTs with CREATE2
  */
 contract NFTFactory {
+    // Constants
+    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0xc5c4bb399938625523250B708dc5c1e7dE4b1626);
+    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
+    address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+
+    // Usage types
+    uint8 public constant USAGE_FREE = 0;
+    uint8 public constant USAGE_PREMIUM = 1;
+    uint8 public constant USAGE_PAID = 2;
+
+    // Statistics
+    uint256 public totalFreeUsage;
+    uint256 public totalPremiumUsage;
+    uint256 public totalPaidUsage;
+
     struct NFTInfo {
         address nftAddress;
         string name;
@@ -256,20 +278,28 @@ contract NFTFactory {
         address stakeToken;
     }
 
+    // Errors
+    error InsufficientPayment();
+
+    // Events
     event NFTCreated(
         address indexed nftAddress,
         address indexed creator,
         string name,
         string symbol,
         bool stakeToMintEnabled,
-        address stakeToken
+        address stakeToken,
+        uint8 usageType
     );
+    event ReferralPaid(address indexed referrer, address indexed payer, uint256 amount);
+    event FeePaid(address indexed payer, uint256 amount);
 
     address[] public allNFTs;
     mapping(address => address[]) public userNFTs;
 
     /**
-     * @notice Create ERC721 NFT
+     * @notice Create ERC721 NFT (paid version)
+     * @param referrer Referrer address for fee sharing
      */
     function createERC721(
         string memory name,
@@ -278,8 +308,44 @@ contract NFTFactory {
         bool publicMintEnabled,
         bool stakeToMintEnabled,
         address stakeToken,
+        uint256 stakeAmount,
+        address referrer
+    ) external payable returns (address) {
+        // Check premium status and collect fee
+        uint8 usageType = _checkAndCollectFee(referrer);
+
+        return _createERC721(name, symbol, baseURI, publicMintEnabled, stakeToMintEnabled, stakeToken, stakeAmount, usageType);
+    }
+
+    /**
+     * @notice Create ERC721 NFT (free version)
+     */
+    function createERC721Free(
+        string memory name,
+        string memory symbol,
+        string memory baseURI,
+        bool publicMintEnabled,
+        bool stakeToMintEnabled,
+        address stakeToken,
         uint256 stakeAmount
     ) external returns (address) {
+        totalFreeUsage++;
+        return _createERC721(name, symbol, baseURI, publicMintEnabled, stakeToMintEnabled, stakeToken, stakeAmount, USAGE_FREE);
+    }
+
+    /**
+     * @dev Internal function to create ERC721 NFT
+     */
+    function _createERC721(
+        string memory name,
+        string memory symbol,
+        string memory baseURI,
+        bool publicMintEnabled,
+        bool stakeToMintEnabled,
+        address stakeToken,
+        uint256 stakeAmount,
+        uint8 usageType
+    ) internal returns (address) {
         require(bytes(name).length > 0, "Name empty");
         require(bytes(symbol).length > 0, "Symbol empty");
 
@@ -298,9 +364,46 @@ contract NFTFactory {
         allNFTs.push(nftAddress);
         userNFTs[msg.sender].push(nftAddress);
 
-        emit NFTCreated(nftAddress, msg.sender, name, symbol, stakeToMintEnabled, stakeToken);
+        emit NFTCreated(nftAddress, msg.sender, name, symbol, stakeToMintEnabled, stakeToken, usageType);
 
         return nftAddress;
+    }
+
+    /**
+     * @dev Check premium status and collect fee if needed
+     */
+    function _checkAndCollectFee(address referrer) internal returns (uint8 usageType) {
+        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
+
+        if (isPremium) {
+            totalPremiumUsage++;
+            return USAGE_PREMIUM;
+        }
+
+        // Non-member must pay
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+
+        totalPaidUsage++;
+
+        // Split fee with referrer (50%)
+        if (referrer != address(0) && referrer != msg.sender) {
+            uint256 referralAmount = msg.value >> 1; // 50%
+            (bool success,) = payable(referrer).call{value: referralAmount}("");
+            if (success) {
+                emit ReferralPaid(referrer, msg.sender, referralAmount);
+            }
+        }
+
+        // Transfer remaining to owner
+        uint256 ownerAmount = address(this).balance;
+        if (ownerAmount > 0) {
+            (bool success,) = payable(OWNER).call{value: ownerAmount}("");
+            if (success) {
+                emit FeePaid(msg.sender, ownerAmount);
+            }
+        }
+
+        return USAGE_PAID;
     }
 
     /**

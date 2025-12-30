@@ -41,7 +41,7 @@ contract TokenSweepTest is Test {
     event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
     event ReferralPaid(address indexed referrer, address indexed caller, uint256 amount);
     event OwnerPaid(address indexed owner, address indexed caller, uint256 amount);
-    event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, bool isPremium);
+    event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, uint8 usageType);
 
     function setUp() public {
         // Deploy premium contract first
@@ -391,20 +391,20 @@ contract TokenSweepTest is Test {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        // Test premium member event
+        // Test premium member event (usageType = 1 = USAGE_PREMIUM)
         vm.prank(premiumMember);
         vm.expectEmit(true, true, false, true);
-        emit MulticallExecuted(premiumMember, recipient, 0, true);
+        emit MulticallExecuted(premiumMember, recipient, 0, 1);
         tokenSweep.multicall(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
-        // Test non-member with referrer events
+        // Test non-member with referrer events (usageType = 2 = USAGE_PAID)
         vm.prank(nonMember);
         vm.expectEmit(true, true, false, true);
         emit ReferralPaid(referrer, nonMember, 0.0025 ether);
         vm.expectEmit(true, true, false, true);
         emit OwnerPaid(owner, nonMember, 0.0025 ether);
         vm.expectEmit(true, true, false, true);
-        emit MulticallExecuted(nonMember, recipient, 0, false);
+        emit MulticallExecuted(nonMember, recipient, 0, 2);
         tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
     }
 
