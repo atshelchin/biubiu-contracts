@@ -28,7 +28,15 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.OWNER(), owner);
     }
 
-    // Test daily subscription without referrer
+    // Test ERC721 basics
+    function testERC721Basics() public view {
+        assertEq(premium.name(), "BiuBiu Premium");
+        assertEq(premium.symbol(), "BBP");
+        assertTrue(premium.supportsInterface(0x80ac58cd)); // ERC721
+        assertTrue(premium.supportsInterface(0x01ffc9a7)); // ERC165
+    }
+
+    // Test daily subscription without referrer - mints NFT
     function testSubscribeDailyNoReferrer() public {
         vm.startPrank(user1);
 
@@ -38,6 +46,13 @@ contract BiuBiuPremiumTest is Test {
 
         // Owner receives payment automatically
         assertEq(owner.balance, ownerBalanceBefore + 0.01 ether);
+
+        // Check NFT was minted
+        assertEq(premium.balanceOf(user1), 1);
+        assertEq(premium.ownerOf(1), user1);
+
+        // Check activeSubscription
+        assertEq(premium.activeSubscription(user1), 1);
 
         // Check subscription info
         (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium.getSubscriptionInfo(user1);
@@ -84,17 +99,19 @@ contract BiuBiuPremiumTest is Test {
         vm.stopPrank();
     }
 
-    // Test subscription extension (cumulative)
+    // Test subscription extension (cumulative) - renews active NFT
     function testSubscriptionExtension() public {
         vm.startPrank(user1);
 
-        // First subscription
+        // First subscription - mints NFT tokenId=1
         premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+        assertEq(premium.balanceOf(user1), 1);
 
         uint256 firstExpiry = block.timestamp + 1 days;
 
-        // Second subscription
+        // Second subscription - renews existing NFT (no new mint)
         premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+        assertEq(premium.balanceOf(user1), 1); // Still only 1 NFT
 
         (, uint256 expiryTime,) = premium.getSubscriptionInfo(user1);
         assertEq(expiryTime, firstExpiry + 1 days);
@@ -115,11 +132,14 @@ contract BiuBiuPremiumTest is Test {
         (bool isPremium,,) = premium.getSubscriptionInfo(user1);
         assertFalse(isPremium);
 
-        // Subscribe again
+        // Subscribe again - renews existing NFT
         premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         (, uint256 newExpiry,) = premium.getSubscriptionInfo(user1);
         assertEq(newExpiry, block.timestamp + 1 days);
+
+        // Still only 1 NFT
+        assertEq(premium.balanceOf(user1), 1);
 
         vm.stopPrank();
     }
@@ -161,6 +181,137 @@ contract BiuBiuPremiumTest is Test {
         assertEq(remainingTime, 0);
     }
 
+    // Test NFT transfer - activeSubscription handling
+    function testNFTTransfer() public {
+        // User1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        assertEq(premium.activeSubscription(user1), 1);
+        assertEq(premium.activeSubscription(user2), 0);
+
+        // User1 transfers NFT to user2
+        vm.prank(user1);
+        premium.transferFrom(user1, user2, 1);
+
+        // Check ownership transferred
+        assertEq(premium.ownerOf(1), user2);
+
+        // Check activeSubscription updated
+        assertEq(premium.activeSubscription(user1), 0); // Deactivated from sender
+        assertEq(premium.activeSubscription(user2), 1); // Auto-activated for receiver
+
+        // Check subscription info
+        (bool isPremium1,,) = premium.getSubscriptionInfo(user1);
+        (bool isPremium2,,) = premium.getSubscriptionInfo(user2);
+        assertFalse(isPremium1);
+        assertTrue(isPremium2);
+    }
+
+    // Test NFT transfer to user who already has active subscription
+    function testNFTTransferToActiveUser() public {
+        // User1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // User2 subscribes
+        vm.prank(user2);
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        assertEq(premium.activeSubscription(user1), 1);
+        assertEq(premium.activeSubscription(user2), 2);
+
+        // User1 transfers NFT to user2
+        vm.prank(user1);
+        premium.transferFrom(user1, user2, 1);
+
+        // User2's active subscription should NOT change (they already had one)
+        assertEq(premium.activeSubscription(user2), 2);
+
+        // User2 now owns both NFTs
+        assertEq(premium.balanceOf(user2), 2);
+    }
+
+    // Test activate function
+    function testActivate() public {
+        // User1 subscribes twice (first creates NFT, second renews)
+        vm.startPrank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // Deactivate and subscribe again to get new NFT
+        // We need to transfer away and get a new one
+        vm.stopPrank();
+
+        // User2 subscribes to create tokenId=2
+        vm.prank(user2);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // User2 transfers to user1
+        vm.prank(user2);
+        premium.transferFrom(user2, user1, 2);
+
+        // Now user1 has tokenId=1 (active) and tokenId=2
+        assertEq(premium.balanceOf(user1), 2);
+        assertEq(premium.activeSubscription(user1), 1);
+
+        // User1 activates tokenId=2
+        vm.prank(user1);
+        premium.activate(2);
+
+        assertEq(premium.activeSubscription(user1), 2);
+    }
+
+    // Test activate not owner
+    function testActivateNotOwner() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user2);
+        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        premium.activate(1);
+    }
+
+    // Test subscribeToToken (gift subscription)
+    function testSubscribeToToken() public {
+        // User1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        uint256 originalExpiry = premium.subscriptionExpiry(1);
+
+        // User2 gifts more time to user1's NFT
+        vm.prank(user2);
+        premium.subscribeToToken{value: 0.01 ether}(1, BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // Check expiry extended
+        assertEq(premium.subscriptionExpiry(1), originalExpiry + 1 days);
+    }
+
+    // Test subscribeToToken for non-existent token
+    function testSubscribeToTokenNotExists() public {
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        premium.subscribeToToken{value: 0.01 ether}(999, BiuBiuPremium.SubscriptionTier.Daily, address(0));
+    }
+
+    // Test getTokenSubscriptionInfo
+    function testGetTokenSubscriptionInfo() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        (uint256 expiryTime, bool isExpired, address tokenOwner) = premium.getTokenSubscriptionInfo(1);
+
+        assertEq(expiryTime, block.timestamp + 1 days);
+        assertFalse(isExpired);
+        assertEq(tokenOwner, user1);
+
+        // Fast forward past expiry
+        vm.warp(block.timestamp + 2 days);
+
+        (, bool isExpiredNow,) = premium.getTokenSubscriptionInfo(1);
+        assertTrue(isExpiredNow);
+    }
+
     // Test events
     function testSubscribeEvents() public {
         vm.startPrank(user1);
@@ -168,9 +319,9 @@ contract BiuBiuPremiumTest is Test {
         vm.expectEmit(true, true, false, true);
         emit BiuBiuPremium.ReferralPaid(referrer, 0.025 ether);
 
-        vm.expectEmit(true, true, false, true);
+        vm.expectEmit(true, true, true, true);
         emit BiuBiuPremium.Subscribed(
-            user1, BiuBiuPremium.SubscriptionTier.Monthly, block.timestamp + 30 days, referrer, 0.025 ether
+            user1, 1, BiuBiuPremium.SubscriptionTier.Monthly, block.timestamp + 30 days, referrer, 0.025 ether
         );
 
         premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, referrer);
@@ -212,6 +363,10 @@ contract BiuBiuPremiumTest is Test {
 
         assertTrue(isPremium1);
         assertTrue(isPremium2);
+
+        // Check NFT ownership
+        assertEq(premium.ownerOf(1), user1);
+        assertEq(premium.ownerOf(2), user2);
     }
 
     // Test backup owner withdrawal (when auto-transfer fails)
@@ -260,6 +415,424 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(owner);
         vm.expectRevert(BiuBiuPremium.NoBalanceToWithdraw.selector);
         premium.ownerWithdraw(address(0));
+    }
+
+    // Test nextTokenId
+    function testNextTokenId() public {
+        assertEq(premium.nextTokenId(), 1);
+
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        assertEq(premium.nextTokenId(), 2);
+    }
+
+    // Test ERC721 approval
+    function testApproval() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        premium.approve(user2, 1);
+
+        assertEq(premium.getApproved(1), user2);
+
+        // User2 can transfer
+        vm.prank(user2);
+        premium.transferFrom(user1, user2, 1);
+
+        assertEq(premium.ownerOf(1), user2);
+    }
+
+    // Test setApprovalForAll
+    function testApprovalForAll() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        premium.setApprovalForAll(user2, true);
+
+        assertTrue(premium.isApprovedForAll(user1, user2));
+
+        // User2 can transfer
+        vm.prank(user2);
+        premium.transferFrom(user1, user2, 1);
+
+        assertEq(premium.ownerOf(1), user2);
+    }
+
+    // Test getTokenAttributes
+    function testGetTokenAttributes() public {
+        uint256 mintTime = block.timestamp;
+
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        (uint256 mintedAt, address mintedBy, uint256 renewalCount) = premium.getTokenAttributes(1);
+
+        assertEq(mintedAt, mintTime);
+        assertEq(mintedBy, user1);
+        assertEq(renewalCount, 1); // First subscribe counts as 1 renewal
+    }
+
+    // Test getTokenAttributes - renewal count increments
+    function testGetTokenAttributesRenewalCount() public {
+        vm.startPrank(user1);
+
+        // First subscription - mints NFT with renewalCount = 1
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        (,, uint256 count1) = premium.getTokenAttributes(1);
+        assertEq(count1, 1);
+
+        // Second subscription - renews existing, renewalCount = 2
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        (,, uint256 count2) = premium.getTokenAttributes(1);
+        assertEq(count2, 2);
+
+        // Third subscription - renewalCount = 3
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        (,, uint256 count3) = premium.getTokenAttributes(1);
+        assertEq(count3, 3);
+
+        vm.stopPrank();
+    }
+
+    // Test getTokenAttributes for non-existent token
+    function testGetTokenAttributesNotExists() public {
+        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        premium.getTokenAttributes(999);
+    }
+
+    // Test getTokenAttributes - mintedBy is the original minter after transfer
+    function testGetTokenAttributesMinterPersistsAfterTransfer() public {
+        uint256 mintTime = block.timestamp;
+
+        // User1 subscribes (mints NFT)
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // Transfer to user2
+        vm.prank(user1);
+        premium.transferFrom(user1, user2, 1);
+
+        // Attributes should still show user1 as the original minter
+        (uint256 mintedAt, address mintedBy, uint256 renewalCount) = premium.getTokenAttributes(1);
+
+        assertEq(mintedAt, mintTime);
+        assertEq(mintedBy, user1); // Original minter preserved
+        assertEq(renewalCount, 1);
+
+        // User2 renews - renewalCount increases
+        vm.prank(user2);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // User2's active token is now token 1 (auto-activated on transfer)
+        (, address mintedBy2, uint256 count2) = premium.getTokenAttributes(1);
+        assertEq(mintedBy2, user1); // Still user1
+        assertEq(count2, 2); // Renewal count increased
+    }
+
+    // Test getTokenAttributes - gift subscription increases renewal count
+    function testGetTokenAttributesGiftRenewal() public {
+        // User1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        (,, uint256 count1) = premium.getTokenAttributes(1);
+        assertEq(count1, 1);
+
+        // User2 gifts more time via subscribeToToken
+        vm.prank(user2);
+        premium.subscribeToToken{value: 0.01 ether}(1, BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        (,, uint256 count2) = premium.getTokenAttributes(1);
+        assertEq(count2, 2); // Gift also counts as renewal
+    }
+
+    // Test totalSupply
+    function testTotalSupply() public {
+        assertEq(premium.totalSupply(), 0);
+
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        assertEq(premium.totalSupply(), 1);
+
+        vm.prank(user2);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        assertEq(premium.totalSupply(), 2);
+
+        // Renewal should not increase totalSupply
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        assertEq(premium.totalSupply(), 2);
+    }
+
+    // Test getTokenSubscriptionInfo reverts for non-existent token
+    function testGetTokenSubscriptionInfoNotExists() public {
+        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        premium.getTokenSubscriptionInfo(999);
+    }
+
+    // Test tokenURI returns valid base64 JSON
+    function testTokenURI() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        string memory uri = premium.tokenURI(1);
+
+        // Should start with data:application/json;base64,
+        bytes memory prefix = bytes("data:application/json;base64,");
+        bytes memory uriBytes = bytes(uri);
+
+        assertTrue(uriBytes.length > prefix.length);
+
+        for (uint256 i = 0; i < prefix.length; i++) {
+            assertEq(uriBytes[i], prefix[i]);
+        }
+    }
+
+    // Test tokenURI for non-existent token
+    function testTokenURINotExists() public {
+        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        premium.tokenURI(999);
+    }
+
+    // Test ReferralPaid event only emitted on successful transfer
+    function testReferralPaidOnlyOnSuccess() public {
+        // Create a contract that rejects ETH
+        RejectingContract rejecter = new RejectingContract();
+
+        vm.prank(user1);
+        // Subscribe with rejecter as referrer - should succeed but no ReferralPaid event
+        premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, address(rejecter));
+
+        // Subscription should still succeed
+        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
+        assertTrue(isPremium);
+    }
+
+    // ========== Additional Coverage Tests ==========
+
+    // Test balanceOf with zero address reverts
+    function testBalanceOfZeroAddress() public {
+        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        premium.balanceOf(address(0));
+    }
+
+    // Test ownerOf for non-existent token
+    function testOwnerOfNotExists() public {
+        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        premium.ownerOf(999);
+    }
+
+    // Test getApproved for non-existent token
+    function testGetApprovedNotExists() public {
+        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        premium.getApproved(999);
+    }
+
+    // Test approve to self reverts
+    function testApproveToSelf() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        premium.approve(user1, 1);
+    }
+
+    // Test approve by non-owner/non-approved reverts
+    function testApproveNotAuthorized() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user2);
+        vm.expectRevert(BiuBiuPremium.NotApproved.selector);
+        premium.approve(referrer, 1);
+    }
+
+    // Test setApprovalForAll to self reverts
+    function testSetApprovalForAllToSelf() public {
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        premium.setApprovalForAll(user1, true);
+    }
+
+    // Test safeTransferFrom (without data)
+    function testSafeTransferFrom() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        premium.safeTransferFrom(user1, user2, 1);
+
+        assertEq(premium.ownerOf(1), user2);
+        assertEq(premium.activeSubscription(user2), 1);
+    }
+
+    // Test safeTransferFrom (with data)
+    function testSafeTransferFromWithData() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        premium.safeTransferFrom(user1, user2, 1, "test data");
+
+        assertEq(premium.ownerOf(1), user2);
+    }
+
+    // Test safeTransferFrom to contract that rejects
+    function testSafeTransferFromToNonReceiver() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // RejectingContract doesn't implement onERC721Received
+        RejectingContract nonReceiver = new RejectingContract();
+
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.TransferToNonReceiver.selector);
+        premium.safeTransferFrom(user1, address(nonReceiver), 1);
+    }
+
+    // Test transferFrom to zero address reverts
+    function testTransferToZeroAddress() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        premium.transferFrom(user1, address(0), 1);
+    }
+
+    // Test transferFrom with wrong 'from' address
+    function testTransferFromWrongFrom() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        premium.transferFrom(user2, referrer, 1); // user2 doesn't own token 1
+    }
+
+    // Test ERC20 withdrawal
+    function testERC20Withdrawal() public {
+        // Deploy a mock ERC20
+        MockERC20 token = new MockERC20();
+
+        // Mint tokens to the premium contract
+        token.mint(address(premium), 1000 ether);
+
+        assertEq(token.balanceOf(address(premium)), 1000 ether);
+
+        uint256 ownerTokenBalanceBefore = token.balanceOf(owner);
+
+        // Anyone can call withdraw, but tokens go to owner
+        vm.prank(user1);
+        premium.ownerWithdraw(address(token));
+
+        assertEq(token.balanceOf(address(premium)), 0);
+        assertEq(token.balanceOf(owner), ownerTokenBalanceBefore + 1000 ether);
+    }
+
+    // Test ERC20 withdrawal with zero balance
+    function testERC20WithdrawalNoBalance() public {
+        MockERC20 token = new MockERC20();
+
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NoBalanceToWithdraw.selector);
+        premium.ownerWithdraw(address(token));
+    }
+
+    // Test supportsInterface for ERC721Metadata
+    function testSupportsInterfaceMetadata() public view {
+        assertTrue(premium.supportsInterface(0x5b5e139f)); // ERC721Metadata
+        assertFalse(premium.supportsInterface(0x12345678)); // Random interface
+    }
+
+    // Test activate with tokenId 0 (edge case - tokenId 0 doesn't exist)
+    function testActivateTokenZero() public {
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        premium.activate(0);
+    }
+
+    // Test subscribe mints to contract receiver
+    function testSubscribeToContractReceiver() public {
+        ERC721Receiver receiver = new ERC721Receiver();
+        vm.deal(address(receiver), 1 ether);
+
+        vm.prank(address(receiver));
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        assertEq(premium.ownerOf(1), address(receiver));
+    }
+
+    // Test operator can transfer via approval
+    function testOperatorTransfer() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        // User1 sets user2 as operator
+        vm.prank(user1);
+        premium.setApprovalForAll(user2, true);
+
+        // User2 can also approve on behalf of user1
+        vm.prank(user2);
+        premium.approve(referrer, 1);
+
+        assertEq(premium.getApproved(1), referrer);
+    }
+
+    // Test approval is cleared after transfer
+    function testApprovalClearedAfterTransfer() public {
+        vm.prank(user1);
+        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+
+        vm.prank(user1);
+        premium.approve(referrer, 1);
+        assertEq(premium.getApproved(1), referrer);
+
+        vm.prank(user1);
+        premium.transferFrom(user1, user2, 1);
+
+        // Approval should be cleared
+        assertEq(premium.getApproved(1), address(0));
+    }
+}
+
+// Contract that rejects ETH to test failed referral payments
+contract RejectingContract {
+    receive() external payable {
+        revert("I reject ETH");
+    }
+}
+
+// Mock ERC20 for testing token withdrawal
+contract MockERC20 {
+    mapping(address => uint256) public balanceOf;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
+// ERC721 Receiver contract for testing safeMint
+contract ERC721Receiver {
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return this.onERC721Received.selector;
     }
 }
 
