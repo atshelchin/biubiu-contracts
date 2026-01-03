@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IWETH} from "../interfaces/IWETH.sol";
+
 /**
  * @title WETH with Approve on Deposit
  * @notice Wrapped ETH contract with additional functionality to approve spender during deposit
  * @dev Implements ERC20 standard with depositAndApprove function
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
-contract WETH {
+contract WETH is IWETH {
     string public name = "Wrapped Ether";
     string public symbol = "WETH";
     uint8 public decimals = 18;
@@ -15,12 +17,6 @@ contract WETH {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
     uint256 public totalSupply;
-
-    event Deposit(address indexed account, uint256 amount);
-    event Withdrawal(address indexed account, uint256 amount);
-    event DepositAndApprove(address indexed account, address indexed spender, uint256 amount);
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
 
     /**
      * @notice Deposit native coin and receive WETH

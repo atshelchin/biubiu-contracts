@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
+
 /**
  * @title BiuBiuPremium
  * @notice A subscription NFT contract with three tiers and referral system
  * @dev Subscription info is bound to NFT tokenId. Users can hold multiple NFTs but only activate one at a time.
  *      Implements ERC721 without external dependencies.
  */
-contract BiuBiuPremium {
+contract BiuBiuPremium is IBiuBiuPremium {
     // Custom errors (gas efficient)
     error ReentrancyDetected();
     error IncorrectPaymentAmount();
@@ -34,13 +36,6 @@ contract BiuBiuPremium {
     mapping(address => uint256) private _balances;
     mapping(uint256 => address) private _tokenApprovals;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
-
-    // Subscription tier enum
-    enum SubscriptionTier {
-        Daily, // 1 day
-        Monthly, // 30 days
-        Yearly // 365 days
-    }
 
     // Tier pricing (immutable for gas optimization)
     uint256 public constant DAILY_PRICE = 0.01 ether;
@@ -77,24 +72,6 @@ contract BiuBiuPremium {
 
     // User => currently activated tokenId (0 means no active subscription)
     mapping(address => uint256) public activeSubscription;
-
-    // ERC721 events
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-
-    // Subscription events
-    event Subscribed(
-        address indexed user,
-        uint256 indexed tokenId,
-        SubscriptionTier tier,
-        uint256 expiryTime,
-        address indexed referrer,
-        uint256 referralAmount
-    );
-    event ReferralPaid(address indexed referrer, uint256 amount);
-    event Activated(address indexed user, uint256 indexed tokenId);
-    event Deactivated(address indexed user, uint256 indexed tokenId);
 
     modifier nonReentrant() {
         _nonReentrantBefore();

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {TokenFactory, SimpleToken} from "../src/tools/TokenFactory.sol";
+import {TokenInfo} from "../src/interfaces/ITokenFactory.sol";
 import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 
 contract TokenFactoryTest is Test {
@@ -450,7 +451,7 @@ contract TokenFactoryTest is Test {
         vm.prank(alice);
         address tokenAddress = factory.createTokenFree("My Token", "MTK", 18, 1000 ether, true);
 
-        TokenFactory.TokenInfo memory info = factory.getTokenInfo(tokenAddress);
+        TokenInfo memory info = factory.getTokenInfo(tokenAddress);
 
         assertEq(info.tokenAddress, tokenAddress);
         assertEq(info.name, "My Token");
@@ -470,7 +471,7 @@ contract TokenFactoryTest is Test {
         vm.stopPrank();
 
         // Get first 2 tokens with info
-        (TokenFactory.TokenInfo[] memory tokenInfos, uint256 total) = factory.getUserTokensInfoPaginated(alice, 0, 2);
+        (TokenInfo[] memory tokenInfos, uint256 total) = factory.getUserTokensInfoPaginated(alice, 0, 2);
 
         assertEq(total, 3);
         assertEq(tokenInfos.length, 2);
@@ -508,7 +509,7 @@ contract TokenFactoryTest is Test {
         factory.createTokenFree("Bob Token", "BT", 6, 500000, true);
 
         // Get all tokens with info
-        (TokenFactory.TokenInfo[] memory tokenInfos, uint256 total) = factory.getAllTokensInfoPaginated(0, 10);
+        (TokenInfo[] memory tokenInfos, uint256 total) = factory.getAllTokensInfoPaginated(0, 10);
 
         assertEq(total, 2);
         assertEq(tokenInfos.length, 2);
@@ -523,7 +524,7 @@ contract TokenFactoryTest is Test {
     }
 
     function test_GetUserTokensInfoPaginatedEmpty() public {
-        (TokenFactory.TokenInfo[] memory tokenInfos, uint256 total) = factory.getUserTokensInfoPaginated(alice, 0, 10);
+        (TokenInfo[] memory tokenInfos, uint256 total) = factory.getUserTokensInfoPaginated(alice, 0, 10);
 
         assertEq(total, 0);
         assertEq(tokenInfos.length, 0);

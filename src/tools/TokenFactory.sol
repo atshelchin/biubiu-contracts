@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IBiuBiuPremium {
-    function getSubscriptionInfo(address user)
-        external
-        view
-        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
-    function VAULT() external view returns (address);
-    function NON_MEMBER_FEE() external view returns (uint256);
-}
+import {ITokenFactory, TokenInfo} from "../interfaces/ITokenFactory.sol";
+import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 
 /**
  * @title SimpleToken
@@ -114,7 +108,7 @@ contract SimpleToken {
  * @notice Factory contract to deploy custom ERC20 tokens
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
-contract TokenFactory {
+contract TokenFactory is ITokenFactory {
     // Immutables (set via constructor for cross-chain deterministic deployment)
     IBiuBiuPremium public immutable PREMIUM_CONTRACT;
 
@@ -142,32 +136,8 @@ contract TokenFactory {
     uint256 public totalPremiumUsage;
     uint256 public totalPaidUsage;
 
-    struct TokenInfo {
-        address tokenAddress;
-        string name;
-        string symbol;
-        uint8 decimals;
-        uint256 totalSupply;
-        bool mintable;
-        address owner;
-    }
-
     // Errors
     error InsufficientPayment();
-
-    // Events
-    event TokenCreated(
-        address indexed tokenAddress,
-        address indexed creator,
-        string name,
-        string symbol,
-        uint8 decimals,
-        uint256 initialSupply,
-        bool mintable,
-        uint8 usageType
-    );
-    event ReferralPaid(address indexed referrer, address indexed payer, uint256 amount);
-    event FeePaid(address indexed payer, uint256 amount);
 
     // Track all created tokens
     address[] public allTokens;

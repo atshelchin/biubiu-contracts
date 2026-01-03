@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {BiuBiuShare} from "./BiuBiuShare.sol";
+import {IBiuBiuVault} from "../interfaces/IBiuBiuVault.sol";
 
 /**
  * @title BiuBiuVault
@@ -16,7 +17,7 @@ import {BiuBiuShare} from "./BiuBiuShare.sol";
  *
  * No admin, fully permissionless
  */
-contract BiuBiuVault {
+contract BiuBiuVault is IBiuBiuVault {
     // ============ Constants ============
 
     uint256 public constant EPOCH_DURATION = 30 days;
@@ -51,13 +52,6 @@ contract BiuBiuVault {
     mapping(uint256 => mapping(address => uint256)) public deposits;
     // epochId => user => whether user has withdrawn
     mapping(uint256 => mapping(address => bool)) public withdrawn;
-
-    // ============ Events ============
-
-    event EpochStarted(uint256 indexed epochId, uint256 ethAmount, uint256 startTime);
-    event Deposited(uint256 indexed epochId, address indexed user, uint256 amount);
-    event Withdrawn(uint256 indexed epochId, address indexed user, uint256 tokenAmount, uint256 ethReward);
-    event ETHReceived(address indexed from, uint256 amount);
 
     // ============ Errors ============
 

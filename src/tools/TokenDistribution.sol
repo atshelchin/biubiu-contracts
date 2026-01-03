@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {ITokenDistribution, Recipient, DistributionAuth, FailedTransfer} from "../interfaces/ITokenDistribution.sol";
+import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
+
 interface IERC20 {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
@@ -13,25 +17,11 @@ interface IERC1155 {
     function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external;
 }
 
-interface IWETH {
-    function transferFrom(address from, address to, uint256 value) external returns (bool);
-    function withdraw(uint256 amount) external;
-}
-
-interface IBiuBiuPremium {
-    function getSubscriptionInfo(address user)
-        external
-        view
-        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
-    function VAULT() external view returns (address);
-    function NON_MEMBER_FEE() external view returns (uint256);
-}
-
 /// @title TokenDistribution
 /// @notice Batch distribute ETH, ERC20, ERC721, ERC1155 tokens to multiple recipients
 /// @dev Supports self-execute and delegated execute modes with Merkle tree verification
 /// @dev Part of BiuBiu Tools - https://biubiu.tools
-contract TokenDistribution {
+contract TokenDistribution is ITokenDistribution {
     // Immutables (set via constructor for cross-chain deterministic deployment)
     IBiuBiuPremium public immutable PREMIUM_CONTRACT;
     IWETH public immutable WETH;
@@ -93,29 +83,6 @@ contract TokenDistribution {
     mapping(bytes32 uuid => uint256) public distributedAmount;
     mapping(bytes32 uuid => uint256) public totalBatches;
 
-    // Structs
-    struct Recipient {
-        address to;
-        uint256 value; // ERC20/ETH/ERC1155: amount, ERC721: tokenId
-    }
-
-    struct DistributionAuth {
-        bytes32 uuid;
-        address token;
-        uint8 tokenType;
-        uint256 tokenId; // ERC1155 only
-        uint256 totalAmount;
-        uint256 totalBatches;
-        bytes32 merkleRoot;
-        uint256 deadline;
-    }
-
-    struct FailedTransfer {
-        address to;
-        uint256 value;
-        bytes reason;
-    }
-
     // Errors
     error ReentrancyDetected();
     error BatchTooLarge();
@@ -131,28 +98,6 @@ contract TokenDistribution {
     error TransferFailed();
     error ETHTransferFailed();
     error RefundFailed();
-
-    // Events
-    event Distributed(
-        address indexed sender,
-        address indexed token,
-        uint8 tokenType,
-        uint256 recipientCount,
-        uint256 totalAmount,
-        uint8 usageType
-    );
-    event DistributedWithAuth(
-        bytes32 indexed uuid,
-        address indexed signer,
-        uint256 batchId,
-        uint256 recipientCount,
-        uint256 batchAmount,
-        uint8 usageType
-    );
-    event TransferSkipped(address indexed recipient, uint256 value, bytes reason);
-    event Refunded(address indexed to, uint256 amount);
-    event FeeCollected(address indexed payer, uint256 amount);
-    event ReferralPaid(address indexed referrer, uint256 amount);
 
     modifier nonReentrant() {
         if (_locked != 1) revert ReentrancyDetected();

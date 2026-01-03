@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {TokenDistribution} from "../src/tools/TokenDistribution.sol";
+import {Recipient, DistributionAuth, FailedTransfer} from "../src/interfaces/ITokenDistribution.sol";
 import {WETH} from "../src/core/WETH.sol";
 
 // Mock contracts for testing
@@ -168,19 +169,15 @@ contract TokenDistributionTest is Test {
 
     // ============ Helper Functions ============
 
-    function _createRecipients(uint256 count, uint256 amountEach)
-        internal
-        view
-        returns (TokenDistribution.Recipient[] memory)
-    {
-        TokenDistribution.Recipient[] memory recipients = new TokenDistribution.Recipient[](count);
+    function _createRecipients(uint256 count, uint256 amountEach) internal view returns (Recipient[] memory) {
+        Recipient[] memory recipients = new Recipient[](count);
         for (uint256 i = 0; i < count; i++) {
-            recipients[i] = TokenDistribution.Recipient({to: address(uint160(0x1000 + i)), value: amountEach});
+            recipients[i] = Recipient({to: address(uint160(0x1000 + i)), value: amountEach});
         }
         return recipients;
     }
 
-    function _signDistributionAuth(TokenDistribution.DistributionAuth memory auth, uint256 privateKey)
+    function _signDistributionAuth(DistributionAuth memory auth, uint256 privateKey)
         internal
         view
         returns (bytes memory)
@@ -205,11 +202,7 @@ contract TokenDistributionTest is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    function _computeMerkleRoot(TokenDistribution.Recipient[] memory recipients, uint256 batchId)
-        internal
-        pure
-        returns (bytes32)
-    {
+    function _computeMerkleRoot(Recipient[] memory recipients, uint256 batchId) internal pure returns (bytes32) {
         uint256 len = recipients.length;
         bytes32[] memory leaves = new bytes32[](len);
 
@@ -242,7 +235,7 @@ contract TokenDistributionTest is Test {
         return leaves[0];
     }
 
-    function _computeMerkleProof(TokenDistribution.Recipient[] memory recipients, uint256 batchId, uint256 leafIndex)
+    function _computeMerkleProof(Recipient[] memory recipients, uint256 batchId, uint256 leafIndex)
         internal
         pure
         returns (bytes32[] memory)
@@ -308,7 +301,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_Basic() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(3, 1 ether);
+        Recipient[] memory recipients = _createRecipients(3, 1 ether);
 
         uint256 aliceBalanceBefore = alice.balance;
 
@@ -333,7 +326,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_NonPremiumPaysFee() public {
         mockPremium.setPremium(alice, false);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
 
         uint256 protocolOwnerBalanceBefore = VAULT.balance;
 
@@ -351,7 +344,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_WithReferrer() public {
         mockPremium.setPremium(alice, false);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         uint256 referrerBalanceBefore = referrer.balance;
 
@@ -365,7 +358,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_RefundsExcess() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         uint256 aliceBalanceBefore = alice.balance;
 
@@ -379,7 +372,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_InsufficientPaymentReverts() public {
         mockPremium.setPremium(alice, false);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.InsufficientPayment.selector);
@@ -391,7 +384,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_BatchTooLargeReverts() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(101, 0.01 ether);
+        Recipient[] memory recipients = _createRecipients(101, 0.01 ether);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.BatchTooLarge.selector);
@@ -401,7 +394,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_EmptyRecipientsReverts() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = new TokenDistribution.Recipient[](0);
+        Recipient[] memory recipients = new Recipient[](0);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.BatchTooLarge.selector);
@@ -411,9 +404,9 @@ contract TokenDistributionTest is Test {
     function test_DistributeETH_SkipsZeroAddress() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = new TokenDistribution.Recipient[](2);
-        recipients[0] = TokenDistribution.Recipient({to: address(0), value: 1 ether});
-        recipients[1] = TokenDistribution.Recipient({to: bob, value: 1 ether});
+        Recipient[] memory recipients = new Recipient[](2);
+        recipients[0] = Recipient({to: address(0), value: 1 ether});
+        recipients[1] = Recipient({to: bob, value: 1 ether});
 
         uint256 aliceBalanceBefore = alice.balance;
 
@@ -437,7 +430,7 @@ contract TokenDistributionTest is Test {
         vm.prank(alice);
         mockToken.approve(address(distribution), 1000 ether);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(3, 100 ether);
+        Recipient[] memory recipients = _createRecipients(3, 100 ether);
 
         vm.prank(alice);
         distribution.distribute(
@@ -462,7 +455,7 @@ contract TokenDistributionTest is Test {
         vm.prank(alice);
         mockToken.approve(address(distribution), 100 ether);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 100 ether);
+        Recipient[] memory recipients = _createRecipients(1, 100 ether);
 
         vm.prank(alice);
         distribution.distribute{value: NON_MEMBER_FEE}(address(mockToken), 1, 0, recipients, address(0));
@@ -482,10 +475,10 @@ contract TokenDistributionTest is Test {
         vm.prank(alice);
         mockNFT.setApprovalForAll(address(distribution), true);
 
-        TokenDistribution.Recipient[] memory recipients = new TokenDistribution.Recipient[](3);
-        recipients[0] = TokenDistribution.Recipient({to: bob, value: 1}); // tokenId 1
-        recipients[1] = TokenDistribution.Recipient({to: charlie, value: 2}); // tokenId 2
-        recipients[2] = TokenDistribution.Recipient({to: owner, value: 3}); // tokenId 3
+        Recipient[] memory recipients = new Recipient[](3);
+        recipients[0] = Recipient({to: bob, value: 1}); // tokenId 1
+        recipients[1] = Recipient({to: charlie, value: 2}); // tokenId 2
+        recipients[2] = Recipient({to: owner, value: 3}); // tokenId 3
 
         vm.prank(alice);
         distribution.distribute(
@@ -512,7 +505,7 @@ contract TokenDistributionTest is Test {
         vm.prank(alice);
         mockERC1155.setApprovalForAll(address(distribution), true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(3, 100);
+        Recipient[] memory recipients = _createRecipients(3, 100);
 
         vm.prank(alice);
         distribution.distribute(
@@ -533,7 +526,7 @@ contract TokenDistributionTest is Test {
     function test_Distribute_InvalidTokenTypeReverts() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.InvalidTokenType.selector);
@@ -555,10 +548,10 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(1)),
             token: address(weth),
             tokenType: 0, // WETH
@@ -606,10 +599,10 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(2)),
             token: address(weth),
             tokenType: 0,
@@ -639,10 +632,10 @@ contract TokenDistributionTest is Test {
     function test_DistributeWithAuth_DeadlineExpiredReverts() public {
         mockPremium.setPremium(ownerFromKey, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(3)),
             token: address(weth),
             tokenType: 0,
@@ -670,10 +663,10 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(4)),
             token: address(weth),
             tokenType: 0,
@@ -703,10 +696,10 @@ contract TokenDistributionTest is Test {
     function test_DistributeWithAuth_InvalidBatchIdReverts() public {
         mockPremium.setPremium(ownerFromKey, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(5)),
             token: address(weth),
             tokenType: 0,
@@ -745,10 +738,10 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(6)),
             token: address(weth),
             tokenType: 0,
@@ -789,10 +782,10 @@ contract TokenDistributionTest is Test {
     function test_DistributeWithAuth_InvalidSignatureLengthReverts() public {
         mockPremium.setPremium(ownerFromKey, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(7)),
             token: address(weth),
             tokenType: 0,
@@ -822,12 +815,12 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
         bytes32 uuid = bytes32(uint256(10));
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: uuid,
             token: address(weth),
             tokenType: 0,
@@ -871,7 +864,7 @@ contract TokenDistributionTest is Test {
     function test_DistributeMaxBatchSize() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(100, 0.01 ether);
+        Recipient[] memory recipients = _createRecipients(100, 0.01 ether);
 
         vm.prank(alice);
         distribution.distribute{value: 1 ether}(address(0), 0, 0, recipients, address(0));
@@ -890,10 +883,10 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         mockToken.approve(address(distribution), 1000 ether);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 100 ether);
+        Recipient[] memory recipients = _createRecipients(2, 100 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(20)),
             token: address(mockToken),
             tokenType: 1, // ERC20
@@ -932,7 +925,7 @@ contract TokenDistributionTest is Test {
 
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(recipientCount, amountEach);
+        Recipient[] memory recipients = _createRecipients(recipientCount, amountEach);
         uint256 totalAmount = uint256(recipientCount) * uint256(amountEach);
 
         vm.deal(alice, totalAmount + 1 ether);
@@ -949,7 +942,7 @@ contract TokenDistributionTest is Test {
     function test_EmitsDistributedEvent() public {
         mockPremium.setPremium(alice, true);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
 
         vm.expectEmit(true, true, false, true);
         emit Distributed(alice, address(0), 0, 2, 2 ether, 1); // usageType = 1 = USAGE_PREMIUM
@@ -961,7 +954,7 @@ contract TokenDistributionTest is Test {
     function test_EmitsReferralPaidEvent() public {
         mockPremium.setPremium(alice, false);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         vm.expectEmit(true, false, false, true);
         emit ReferralPaid(referrer, NON_MEMBER_FEE / 2);
@@ -978,10 +971,10 @@ contract TokenDistributionTest is Test {
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
-        TokenDistribution.DistributionAuth memory auth = TokenDistribution.DistributionAuth({
+        DistributionAuth memory auth = DistributionAuth({
             uuid: bytes32(uint256(100)),
             token: address(weth),
             tokenType: 0,
@@ -1011,7 +1004,7 @@ contract TokenDistributionTest is Test {
     function test_FeeCollection_ReferrerGets50Percent() public {
         mockPremium.setPremium(alice, false);
 
-        TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 0.1 ether);
+        Recipient[] memory recipients = _createRecipients(1, 0.1 ether);
 
         uint256 referrerBalanceBefore = referrer.balance;
         uint256 ownerBalanceBefore = VAULT.balance;

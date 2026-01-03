@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Test} from "forge-std/Test.sol";
 import {TokenSweep, Wallet} from "../src/tools/TokenSweep.sol";
 import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
+import {IBiuBiuPremium} from "../src/interfaces/IBiuBiuPremium.sol";
 
 // Mock ERC20 token for testing
 contract MockERC20 {
@@ -64,7 +65,7 @@ contract TokenSweepTest is Test {
 
         // Make premiumMember a premium member
         vm.prank(premiumMember);
-        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+        premium.subscribe{value: 0.01 ether}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
     }
 
     // Test constants
@@ -329,7 +330,7 @@ contract TokenSweepTest is Test {
 
         // Subscribe for 1 day
         vm.prank(expiredMember);
-        premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
+        premium.subscribe{value: 0.01 ether}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         // Fast forward past expiry
         vm.warp(block.timestamp + 2 days);

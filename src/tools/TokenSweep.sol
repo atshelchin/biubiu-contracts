@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {ITokenSweep, Wallet} from "../interfaces/ITokenSweep.sol";
+import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
+
 /**
  * @title TokenSweep
  * @notice Batch sweep tokens from multiple wallets to a single recipient
@@ -13,26 +16,7 @@ interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
-interface IBiuBiuPremium {
-    function getSubscriptionInfo(address user)
-        external
-        view
-        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
-    function VAULT() external view returns (address);
-    function NON_MEMBER_FEE() external view returns (uint256);
-}
-
-interface ITokenSweep {
-    function drainToAddress(address recipient, address[] calldata tokens, uint256 deadline, bytes calldata signature)
-        external;
-}
-
-struct Wallet {
-    address wallet;
-    bytes signature; // 65 bytes: r (32) + s (32) + v (1)
-}
-
-contract TokenSweep {
+contract TokenSweep is ITokenSweep {
     // Immutables (set via constructor for cross-chain deterministic deployment)
     IBiuBiuPremium public immutable PREMIUM_CONTRACT;
 
@@ -72,10 +56,6 @@ contract TokenSweep {
     error InvalidRecipient();
     error TransferFailed();
     error ETHTransferFailed();
-
-    event ReferralPaid(address indexed referrer, address indexed caller, uint256 amount);
-    event VaultPaid(address indexed vault, address indexed caller, uint256 amount);
-    event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, uint8 usageType);
 
     function multicall(
         Wallet[] calldata wallets,

@@ -1,21 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IBiuBiuPremium {
-    function getSubscriptionInfo(address user)
-        external
-        view
-        returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
-    function VAULT() external view returns (address);
-    function NON_MEMBER_FEE() external view returns (uint256);
-}
+import {INFTFactory} from "../interfaces/INFTFactory.sol";
+import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 
 /**
  * @title NFTFactory
  * @notice Factory to deploy ERC721 NFT collections with CREATE2
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
-contract NFTFactory {
+contract NFTFactory is INFTFactory {
     // Immutables (set via constructor for cross-chain deterministic deployment)
     IBiuBiuPremium public immutable PREMIUM_CONTRACT;
 
@@ -58,18 +52,6 @@ contract NFTFactory {
         _;
         _locked = 1;
     }
-
-    // Events
-    event NFTCreated(
-        address indexed nftAddress,
-        address indexed creator,
-        string name,
-        string symbol,
-        string description,
-        uint8 usageType
-    );
-    event ReferralPaid(address indexed referrer, address indexed payer, uint256 amount);
-    event FeePaid(address indexed payer, uint256 amount);
 
     address[] public allNFTs;
     mapping(address => address[]) public userNFTs;
