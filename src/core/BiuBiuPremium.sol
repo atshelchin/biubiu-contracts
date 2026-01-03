@@ -11,7 +11,6 @@ contract BiuBiuPremium {
     // Custom errors (gas efficient)
     error ReentrancyDetected();
     error IncorrectPaymentAmount();
-    error NoBalanceToWithdraw();
     error NotTokenOwner();
     error NoActiveSubscription();
     error TokenNotExists();
@@ -53,8 +52,12 @@ contract BiuBiuPremium {
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
 
-    // Owner address
-    address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+    // Vault address for revenue distribution (set via constructor)
+    address public immutable VAULT;
+
+    constructor(address _vault) {
+        VAULT = _vault;
+    }
 
     // Token attributes struct
     struct TokenAttributes {
@@ -87,7 +90,6 @@ contract BiuBiuPremium {
         uint256 referralAmount
     );
     event ReferralPaid(address indexed referrer, uint256 amount);
-    event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
     event Activated(address indexed user, uint256 indexed tokenId);
     event Deactivated(address indexed user, uint256 indexed tokenId);
 
@@ -381,7 +383,7 @@ contract BiuBiuPremium {
         uint256 contractBalance = address(this).balance;
         // We intentionally ignore the return value to prevent blocking subscriptions
         // forge-lint: disable-next-line(unchecked-call)
-        payable(OWNER).call{value: contractBalance}("");
+        payable(VAULT).call{value: contractBalance}("");
 
         emit Subscribed(msg.sender, tokenId, tier, newExpiry, referrer, referralAmount);
     }
@@ -466,44 +468,7 @@ contract BiuBiuPremium {
     }
 
     /**
-     * @notice Withdraw ETH or ERC20 tokens to OWNER
-     * @param token The token address (use address(0) for ETH)
-     * @dev Can be called by anyone, but funds/tokens always go to OWNER
-     */
-    function ownerWithdraw(address token) external nonReentrant {
-        uint256 amount;
-
-        if (token == address(0)) {
-            // Withdraw ETH
-            amount = address(this).balance;
-            if (amount == 0) revert NoBalanceToWithdraw();
-
-            (bool success,) = payable(OWNER).call{value: amount}("");
-            if (!success) revert("ETH withdrawal failed");
-        } else {
-            // Withdraw ERC20 token
-            (bool balanceSuccess, bytes memory balanceData) =
-                token.staticcall(abi.encodeWithSignature("balanceOf(address)", address(this)));
-
-            if (!balanceSuccess) revert("Failed to get token balance");
-
-            amount = abi.decode(balanceData, (uint256));
-            if (amount == 0) revert NoBalanceToWithdraw();
-
-            (bool success, bytes memory data) =
-                token.call(abi.encodeWithSignature("transfer(address,uint256)", OWNER, amount));
-
-            if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
-                revert("Token withdrawal failed");
-            }
-        }
-
-        emit OwnerWithdrew(OWNER, token, amount);
-    }
-
-    /**
      * @notice Receive ETH sent directly to contract
-     * @dev Any ETH sent can be withdrawn using ownerWithdraw()
      */
     receive() external payable {}
 

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {NFTMetadata} from "../src/NFTMetadata.sol";
+import {NFTMetadata} from "../src/tools/NFTMetadata.sol";
 
 contract NFTMetadataTest is Test {
     NFTMetadata public metadata;

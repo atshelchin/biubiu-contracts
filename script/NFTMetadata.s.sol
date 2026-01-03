@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {NFTMetadata} from "../src/NFTMetadata.sol";
+import {NFTMetadata} from "../src/tools/NFTMetadata.sol";
 
 contract NFTMetadataScript is Script {
     // CREATE2 Deterministic deployment proxy

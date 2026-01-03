@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {TokenFactory} from "../src/TokenFactory.sol";
+import {TokenFactory} from "../src/tools/TokenFactory.sol";
 
 contract TokenFactoryScript is Script {
     // CREATE2 Deterministic deployment proxy

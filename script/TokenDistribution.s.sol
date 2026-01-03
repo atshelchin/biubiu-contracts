@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {TokenDistribution} from "../src/TokenDistribution.sol";
+import {TokenDistribution} from "../src/tools/TokenDistribution.sol";
 
 contract TokenDistributionScript is Script {
     // CREATE2 Deterministic deployment proxy
@@ -26,7 +26,7 @@ contract TokenDistributionScript is Script {
         console.log("TokenDistribution deployed at:", address(tokenDistribution));
         console.log("Premium contract:", address(tokenDistribution.PREMIUM_CONTRACT()));
         console.log("WETH address:", address(tokenDistribution.WETH()));
-        console.log("Owner address:", tokenDistribution.OWNER());
+        console.log("Vault address:", tokenDistribution.VAULT());
         console.log("Non-member fee:", tokenDistribution.NON_MEMBER_FEE());
         console.log("Max batch size:", tokenDistribution.MAX_BATCH_SIZE());
         console.log("=====================================");

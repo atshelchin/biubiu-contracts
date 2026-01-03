@@ -6,6 +6,7 @@ interface IBiuBiuPremium {
         external
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
+    function VAULT() external view returns (address);
 }
 
 /**
@@ -14,10 +15,20 @@ interface IBiuBiuPremium {
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract NFTFactory {
+    // Immutables (set via constructor for cross-chain deterministic deployment)
+    IBiuBiuPremium public immutable PREMIUM_CONTRACT;
+
     // Constants
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
-    address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+
+    constructor(address _premiumContract) {
+        PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
+    }
+
+    /// @notice Get the vault address from PREMIUM_CONTRACT
+    function VAULT() public view returns (address) {
+        return PREMIUM_CONTRACT.VAULT();
+    }
 
     // Usage types
     uint8 public constant USAGE_FREE = 0;
@@ -152,7 +163,7 @@ contract NFTFactory {
         // Transfer remaining to owner
         uint256 ownerAmount = address(this).balance;
         if (ownerAmount > 0) {
-            (bool success,) = payable(OWNER).call{value: ownerAmount}("");
+            (bool success,) = payable(VAULT()).call{value: ownerAmount}("");
             if (success) {
                 emit FeePaid(msg.sender, ownerAmount);
             }

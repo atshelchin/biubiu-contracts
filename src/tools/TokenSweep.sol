@@ -18,6 +18,7 @@ interface IBiuBiuPremium {
         external
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
+    function VAULT() external view returns (address);
 }
 
 interface ITokenSweep {
@@ -31,9 +32,20 @@ struct Wallet {
 }
 
 contract TokenSweep {
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
+    // Immutables (set via constructor for cross-chain deterministic deployment)
+    IBiuBiuPremium public immutable PREMIUM_CONTRACT;
+
+    // Constants
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
-    address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+
+    constructor(address _premiumContract) {
+        PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
+    }
+
+    /// @notice Get the vault address from PREMIUM_CONTRACT
+    function VAULT() public view returns (address) {
+        return PREMIUM_CONTRACT.VAULT();
+    }
 
     // Usage types
     uint8 public constant USAGE_FREE = 0;
@@ -51,18 +63,15 @@ contract TokenSweep {
     // Custom errors (gas efficient)
     error ReentrancyDetected();
     error InsufficientPayment();
-    error NoBalanceToWithdraw();
     error UnauthorizedCaller();
     error InvalidSignature();
     error DeadlineExpired();
     error InvalidRecipient();
     error TransferFailed();
     error ETHTransferFailed();
-    error WithdrawalFailed();
 
-    event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
     event ReferralPaid(address indexed referrer, address indexed caller, uint256 amount);
-    event OwnerPaid(address indexed owner, address indexed caller, uint256 amount);
+    event VaultPaid(address indexed vault, address indexed caller, uint256 amount);
     event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, uint8 usageType);
 
     function multicall(
@@ -157,9 +166,10 @@ contract TokenSweep {
         uint256 contractBalance = address(this).balance;
         if (contractBalance > 0) {
             // forge-lint: disable-next-line(unchecked-call)
-            (bool success,) = payable(OWNER).call{value: contractBalance}("");
+            address vault = VAULT();
+            (bool success,) = payable(vault).call{value: contractBalance}("");
             if (success) {
-                emit OwnerPaid(OWNER, msg.sender, contractBalance);
+                emit VaultPaid(vault, msg.sender, contractBalance);
             }
         }
 
@@ -417,40 +427,5 @@ contract TokenSweep {
             || interfaceId == 0x150b7a02 // ERC721Receiver
             || interfaceId == 0x4e2312e0 // ERC1155Receiver-single
             || interfaceId == 0xbc197c81; // ERC1155Receiver-batch
-    }
-
-    /**
-     * @notice Withdraw ETH or ERC20 tokens to OWNER
-     * @param token The token address (use address(0) for ETH)
-     * @dev Can be called by anyone, but funds/tokens always go to OWNER
-     */
-    function ownerWithdraw(address token) external nonReentrant {
-        uint256 amount;
-
-        if (token == address(0)) {
-            // Withdraw ETH
-            amount = address(this).balance;
-            if (amount == 0) revert NoBalanceToWithdraw();
-
-            (bool success,) = payable(OWNER).call{value: amount}("");
-            if (!success) revert WithdrawalFailed();
-        } else {
-            // Withdraw ERC20 token
-            (bool success, bytes memory data) =
-                token.staticcall(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
-
-            if (!success || data.length < 32) revert WithdrawalFailed();
-
-            amount = abi.decode(data, (uint256));
-            if (amount == 0) revert NoBalanceToWithdraw();
-
-            (success, data) = token.call(abi.encodeWithSelector(IERC20.transfer.selector, OWNER, amount));
-
-            if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
-                revert WithdrawalFailed();
-            }
-        }
-
-        emit OwnerWithdrew(OWNER, token, amount);
     }
 }

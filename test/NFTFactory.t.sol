@@ -2,16 +2,19 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {NFTFactory, SocialNFT} from "../src/NFTFactory.sol";
-import {NFTMetadata} from "../src/NFTMetadata.sol";
+import {NFTFactory, SocialNFT} from "../src/tools/NFTFactory.sol";
+import {NFTMetadata} from "../src/tools/NFTMetadata.sol";
+import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 
 contract NFTFactoryTest is Test {
     NFTFactory public factory;
     NFTMetadata public metadata;
+    BiuBiuPremium public premium;
 
     // The expected METADATA_CONTRACT address in SocialNFT
     address constant METADATA_CONTRACT_ADDR = 0xF68B52ceEAFb4eDB2320E44Efa0be2EBe7a715A6;
 
+    address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
     address public alice = address(0x1);
     address public bob = address(0x2);
     address public charlie = address(0x3);
@@ -29,7 +32,8 @@ contract NFTFactoryTest is Test {
     event MessageLeft(uint256 indexed tokenId, address indexed by, string message);
 
     function setUp() public {
-        factory = new NFTFactory();
+        premium = new BiuBiuPremium(vault);
+        factory = new NFTFactory(address(premium));
 
         // Deploy NFTMetadata and etch it to the expected address
         metadata = new NFTMetadata();

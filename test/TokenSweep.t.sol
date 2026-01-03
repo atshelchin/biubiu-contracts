@@ -2,8 +2,8 @@
 pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
-import {TokenSweep, Wallet} from "../src/TokenSweep.sol";
-import {BiuBiuPremium} from "../src/BiuBiuPremium.sol";
+import {TokenSweep, Wallet} from "../src/tools/TokenSweep.sol";
+import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 
 // Mock ERC20 token for testing
 contract MockERC20 {
@@ -29,7 +29,7 @@ contract TokenSweepTest is Test {
     BiuBiuPremium public premium;
     MockERC20 public token;
 
-    address public owner = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+    address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
     address public premiumMember;
     uint256 public premiumMemberKey;
     address public nonMember;
@@ -38,27 +38,16 @@ contract TokenSweepTest is Test {
     address public referrer = address(0x5);
 
     // Events to test
-    event OwnerWithdrew(address indexed owner, address indexed token, uint256 amount);
     event ReferralPaid(address indexed referrer, address indexed caller, uint256 amount);
-    event OwnerPaid(address indexed owner, address indexed caller, uint256 amount);
+    event VaultPaid(address indexed vault, address indexed caller, uint256 amount);
     event MulticallExecuted(address indexed caller, address indexed recipient, uint256 walletsCount, uint8 usageType);
 
     function setUp() public {
-        // Deploy premium contract first
-        BiuBiuPremium tempPremium = new BiuBiuPremium();
-        address payable expectedPremiumAddress = payable(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
+        // Deploy premium contract with vault address
+        premium = new BiuBiuPremium(vault);
 
-        // Copy bytecode and storage to expected address
-        vm.etch(expectedPremiumAddress, address(tempPremium).code);
-
-        // Initialize storage slots
-        vm.store(expectedPremiumAddress, bytes32(uint256(0)), bytes32(uint256(1))); // _locked = 1
-        vm.store(expectedPremiumAddress, bytes32(uint256(1)), bytes32(uint256(1))); // _nextTokenId = 1
-
-        premium = BiuBiuPremium(expectedPremiumAddress);
-
-        // Deploy TokenSweep
-        tokenSweep = new TokenSweep();
+        // Deploy TokenSweep with premium contract address
+        tokenSweep = new TokenSweep(address(premium));
 
         // Create test accounts
         (premiumMember, premiumMemberKey) = makeAddrAndKey("premiumMember");
@@ -81,7 +70,7 @@ contract TokenSweepTest is Test {
     // Test constants
     function testConstants() public view {
         assertEq(tokenSweep.NON_MEMBER_FEE(), 0.005 ether);
-        assertEq(tokenSweep.OWNER(), owner);
+        assertEq(tokenSweep.VAULT(), vault);
     }
 
     // Test premium member can call multicall for free
@@ -113,14 +102,14 @@ contract TokenSweepTest is Test {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
         uint256 nonMemberBalanceBefore = nonMember.balance;
 
         vm.prank(nonMember);
         tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
-        // Owner should receive full payment
-        assertEq(owner.balance, ownerBalanceBefore + 0.005 ether);
+        // Vault should receive full payment
+        assertEq(vault.balance, vaultBalanceBefore + 0.005 ether);
         assertEq(nonMember.balance, nonMemberBalanceBefore - 0.005 ether);
     }
 
@@ -129,15 +118,15 @@ contract TokenSweepTest is Test {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
 
         vm.prank(nonMember);
         tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
 
-        // Referrer gets 50%, owner gets 50%
+        // Referrer gets 50%, vault gets 50%
         assertEq(referrer.balance, referrerBalanceBefore + 0.0025 ether);
-        assertEq(owner.balance, ownerBalanceBefore + 0.0025 ether);
+        assertEq(vault.balance, vaultBalanceBefore + 0.0025 ether);
     }
 
     // Test signature authorization - premium member authorizes non-member
@@ -190,7 +179,7 @@ contract TokenSweepTest is Test {
     // Test drainToAddress with signature verification
     function testDrainToAddress() public {
         // Create a TokenSweep instance that will act as a wallet
-        TokenSweep wallet = new TokenSweep();
+        TokenSweep wallet = new TokenSweep(address(premium));
 
         // Mint tokens to the wallet
         token.mint(address(wallet), 1000 ether);
@@ -223,39 +212,6 @@ contract TokenSweepTest is Test {
         // In production, drainToAddress would be called with pre-authorized signatures
         vm.expectRevert(TokenSweep.UnauthorizedCaller.selector);
         wallet.drainToAddress(recipient, tokens, deadline, signature);
-    }
-
-    // Test ownerWithdraw
-    function testOwnerWithdraw() public {
-        // Send some ETH to tokenSweep
-        vm.deal(address(tokenSweep), 10 ether);
-
-        uint256 ownerBalanceBefore = owner.balance;
-
-        // Anyone can call ownerWithdraw, funds go to owner
-        tokenSweep.ownerWithdraw(address(0));
-
-        assertEq(owner.balance, ownerBalanceBefore + 10 ether);
-        assertEq(address(tokenSweep).balance, 0);
-    }
-
-    // Test ownerWithdraw with tokens
-    function testOwnerWithdrawToken() public {
-        // Mint tokens to tokenSweep
-        token.mint(address(tokenSweep), 1000 ether);
-
-        uint256 ownerTokenBefore = token.balanceOf(owner);
-
-        tokenSweep.ownerWithdraw(address(token));
-
-        assertEq(token.balanceOf(owner), ownerTokenBefore + 1000 ether);
-        assertEq(token.balanceOf(address(tokenSweep)), 0);
-    }
-
-    // Test ownerWithdraw with no balance
-    function testOwnerWithdrawNoBalance() public {
-        vm.expectRevert(TokenSweep.NoBalanceToWithdraw.selector);
-        tokenSweep.ownerWithdraw(address(0));
     }
 
     // // Test reentrancy protection
@@ -316,7 +272,7 @@ contract TokenSweepTest is Test {
 
     // Test deadline expired in drainToAddress
     function testDrainToAddressDeadlineExpired() public {
-        TokenSweep wallet = new TokenSweep();
+        TokenSweep wallet = new TokenSweep(address(premium));
         address[] memory tokens = new address[](0);
         uint256 expiredDeadline = block.timestamp - 1;
 
@@ -326,7 +282,7 @@ contract TokenSweepTest is Test {
 
     // Test invalid recipient in drainToAddress
     function testDrainToAddressInvalidRecipient() public {
-        TokenSweep wallet = new TokenSweep();
+        TokenSweep wallet = new TokenSweep(address(premium));
         address[] memory tokens = new address[](0);
         uint256 deadline = block.timestamp + 1 hours;
 
@@ -339,15 +295,15 @@ contract TokenSweepTest is Test {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
         uint256 nonMemberBalanceBefore = nonMember.balance;
 
         // Non-member tries to refer themselves
         vm.prank(nonMember);
         tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, nonMember, "");
 
-        // Self-referral should be ignored, owner gets full amount
-        assertEq(owner.balance, ownerBalanceBefore + 0.005 ether);
+        // Self-referral should be ignored, vault gets full amount
+        assertEq(vault.balance, vaultBalanceBefore + 0.005 ether);
         assertEq(nonMember.balance, nonMemberBalanceBefore - 0.005 ether);
     }
 
@@ -356,13 +312,13 @@ contract TokenSweepTest is Test {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(nonMember);
         tokenSweep.multicall{value: 0.01 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
-        // Owner receives all overpayment
-        assertEq(owner.balance, ownerBalanceBefore + 0.01 ether);
+        // Vault receives all overpayment
+        assertEq(vault.balance, vaultBalanceBefore + 0.01 ether);
     }
 
     // Test expired premium membership
@@ -403,7 +359,7 @@ contract TokenSweepTest is Test {
         vm.expectEmit(true, true, false, true);
         emit ReferralPaid(referrer, nonMember, 0.0025 ether);
         vm.expectEmit(true, true, false, true);
-        emit OwnerPaid(owner, nonMember, 0.0025 ether);
+        emit VaultPaid(vault, nonMember, 0.0025 ether);
         vm.expectEmit(true, true, false, true);
         emit MulticallExecuted(nonMember, recipient, 0, 2);
         tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
@@ -411,7 +367,7 @@ contract TokenSweepTest is Test {
 
     // Test drainToAddress with multiple tokens
     function testDrainToAddressMultipleTokens() public {
-        TokenSweep wallet = new TokenSweep();
+        TokenSweep wallet = new TokenSweep(address(premium));
 
         // Create multiple tokens
         MockERC20 token1 = new MockERC20();
@@ -434,7 +390,7 @@ contract TokenSweepTest is Test {
 
     // Test drainToAddress with address(0) in tokens array
     function testDrainToAddressSkipsZeroAddress() public {
-        TokenSweep wallet = new TokenSweep();
+        TokenSweep wallet = new TokenSweep(address(premium));
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(0); // Should be skipped
@@ -476,15 +432,6 @@ contract TokenSweepTest is Test {
         vm.prank(recipient);
         vm.expectRevert(TokenSweep.InsufficientPayment.selector);
         tokenSweep.multicall(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), signature);
-    }
-
-    // Test ownerWithdraw event emission
-    function testOwnerWithdrawEventEmission() public {
-        vm.deal(address(tokenSweep), 5 ether);
-
-        vm.expectEmit(true, true, false, true);
-        emit OwnerWithdrew(owner, address(0), 5 ether);
-        tokenSweep.ownerWithdraw(address(0));
     }
 
     // Test supportsInterface
@@ -551,14 +498,14 @@ contract TokenSweepTest is Test {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
 
         // Non-member pays 0.005 ETH, but contract has 1 ETH already
         vm.prank(nonMember);
         tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
-        // Owner should receive 1 + 0.005 = 1.005 ETH (all contract balance)
-        assertEq(owner.balance, ownerBalanceBefore + 1.005 ether);
+        // Vault should receive 1 + 0.005 = 1.005 ETH (all contract balance)
+        assertEq(vault.balance, vaultBalanceBefore + 1.005 ether);
         assertEq(address(tokenSweep).balance, 0);
     }
 
@@ -571,7 +518,7 @@ contract TokenSweepTest is Test {
         MockERC20 token3 = new MockERC20();
 
         // Deploy TokenSweep contract template for EIP-7702 delegation
-        TokenSweep templateContract = new TokenSweep();
+        TokenSweep templateContract = new TokenSweep(address(premium));
         bytes memory tokenSweepCode = address(templateContract).code;
 
         // Prepare tokens array and deadline for signature
@@ -652,7 +599,7 @@ contract TokenSweepTest is Test {
     // Test multicall with 10 EIP-7702 authorized wallets as non-member (should pay fee)
     function testMulticallWith10WalletsNonMember() public {
         // Deploy TokenSweep contract template for EIP-7702 delegation
-        TokenSweep templateContract = new TokenSweep();
+        TokenSweep templateContract = new TokenSweep(address(premium));
         bytes memory tokenSweepCode = address(templateContract).code;
 
         // Prepare tokens array and deadline for signature
@@ -694,7 +641,7 @@ contract TokenSweepTest is Test {
 
         uint256 recipientBalanceBefore = recipient.balance;
         uint256 recipientTokenBalanceBefore = token.balanceOf(recipient);
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
 
         // Non-member calls multicall with wallets and pays fee with referrer
@@ -710,8 +657,8 @@ contract TokenSweepTest is Test {
         // Verify referrer got 50% of fee
         assertEq(referrer.balance, referrerBalanceBefore + 0.0025 ether);
 
-        // Verify owner got 50% of fee
-        assertEq(owner.balance, ownerBalanceBefore + 0.0025 ether);
+        // Verify vault got 50% of fee
+        assertEq(vault.balance, vaultBalanceBefore + 0.0025 ether);
 
         // Verify sample wallets are empty
         assertEq(wallets[0].wallet.balance, 0);
@@ -737,7 +684,7 @@ contract TokenSweepTest is Test {
         // Store balances
         uint256 rBal = recipient.balance;
         uint256 rTok = token.balanceOf(recipient);
-        uint256 oBal = owner.balance;
+        uint256 vBal = vault.balance;
 
         // Non-member calls with premium member's signature - free
         vm.prank(nonMember);
@@ -746,13 +693,13 @@ contract TokenSweepTest is Test {
         // Verify sweep and no fee charged
         assertEq(recipient.balance, rBal + 5 ether);
         assertEq(token.balanceOf(recipient), rTok + 500 ether);
-        assertEq(owner.balance, oBal);
+        assertEq(vault.balance, vBal);
         assertEq(wallets[0].wallet.balance, 0);
     }
 
     // Helper: Create EIP-7702 delegated wallets
     function _createEIP7702Wallets(uint256 count, string memory prefix) private returns (Wallet[] memory) {
-        TokenSweep temp = new TokenSweep();
+        TokenSweep temp = new TokenSweep(address(premium));
         bytes memory code = address(temp).code;
 
         address[] memory tokens = new address[](1);
@@ -872,7 +819,7 @@ contract TokenSweepTest is Test {
     // Test owner payment failure scenario
     function testOwnerPaymentFailure() public {
         // This tests the case where owner.call fails
-        // Since OWNER is a constant EOA, it won't fail in normal conditions
+        // Since VAULT is a constant EOA, it won't fail in normal conditions
         // But we can still verify the contract handles accumulated balance correctly
 
         Wallet[] memory wallets = new Wallet[](0);

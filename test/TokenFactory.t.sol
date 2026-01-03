@@ -2,11 +2,14 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {TokenFactory, SimpleToken} from "../src/TokenFactory.sol";
+import {TokenFactory, SimpleToken} from "../src/tools/TokenFactory.sol";
+import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 
 contract TokenFactoryTest is Test {
     TokenFactory public factory;
+    BiuBiuPremium public premium;
 
+    address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
     address public alice = address(0x1);
     address public bob = address(0x2);
 
@@ -22,7 +25,8 @@ contract TokenFactoryTest is Test {
     );
 
     function setUp() public {
-        factory = new TokenFactory();
+        premium = new BiuBiuPremium(vault);
+        factory = new TokenFactory(address(premium));
     }
 
     // ========== Token Creation Tests ==========

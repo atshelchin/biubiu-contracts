@@ -2,9 +2,10 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
+import {BiuBiuVault} from "../src/core/BiuBiuVault.sol";
+import {BiuBiuShare} from "../src/core/BiuBiuShare.sol";
 
-contract BiuBiuPremiumScript is Script {
+contract BiuBiuVaultScript is Script {
     // CREATE2 Deterministic deployment proxy
     address constant CREATE2_PROXY = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
@@ -14,19 +15,25 @@ contract BiuBiuPremiumScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Get contract bytecode
-        bytes memory bytecode = type(BiuBiuPremium).creationCode;
+        bytes memory bytecode = type(BiuBiuVault).creationCode;
 
         // Salt for deterministic address (can be changed)
         bytes32 salt = bytes32(uint256(0));
 
         // Deploy via CREATE2 proxy
-        BiuBiuPremium premium = BiuBiuPremium(payable(deployViaCreate2Proxy(bytecode, salt)));
+        BiuBiuVault vault = BiuBiuVault(payable(deployViaCreate2Proxy(bytecode, salt)));
+        BiuBiuShare shareToken = vault.shareToken();
 
-        console.log("BiuBiuPremium deployed at:", address(premium));
-        console.log("Vault address:", premium.VAULT());
-        console.log("Daily price:", premium.DAILY_PRICE());
-        console.log("Monthly price:", premium.MONTHLY_PRICE());
-        console.log("Yearly price:", premium.YEARLY_PRICE());
+        console.log("=== BiuBiuVault Deployment ===");
+        console.log("BiuBiuVault deployed at:", address(vault));
+        console.log("BiuBiuShare deployed at:", address(shareToken));
+        console.log("Share Token Name:", shareToken.name());
+        console.log("Share Token Symbol:", shareToken.symbol());
+        console.log("Total Supply:", shareToken.totalSupply());
+        console.log("Founder:", shareToken.FOUNDER());
+        console.log("Epoch Duration:", vault.EPOCH_DURATION());
+        console.log("Deposit Period:", vault.DEPOSIT_PERIOD());
+        console.log("==============================");
 
         vm.stopBroadcast();
     }
@@ -62,24 +69,24 @@ contract BiuBiuPremiumScript is Script {
     }
 
     /// @notice Get the deterministic deployment address without deploying
-    function getDeploymentAddress() external view returns (address) {
-        bytes memory bytecode = type(BiuBiuPremium).creationCode;
+    function getDeploymentAddress() external pure returns (address) {
+        bytes memory bytecode = type(BiuBiuVault).creationCode;
         bytes32 salt = bytes32(uint256(0));
         return computeCreate2Address(bytecode, salt);
     }
 
     /// @notice Get the deterministic deployment address with custom salt
-    function getDeploymentAddress(bytes32 salt) external view returns (address) {
-        bytes memory bytecode = type(BiuBiuPremium).creationCode;
+    function getDeploymentAddress(bytes32 salt) external pure returns (address) {
+        bytes memory bytecode = type(BiuBiuVault).creationCode;
         return computeCreate2Address(bytecode, salt);
     }
 
     /// @notice Print the deterministic deployment address (for CLI use)
-    function printAddress() external view {
-        bytes memory bytecode = type(BiuBiuPremium).creationCode;
+    function printAddress() external pure {
+        bytes memory bytecode = type(BiuBiuVault).creationCode;
         bytes32 salt = bytes32(uint256(0));
         address predicted = computeCreate2Address(bytecode, salt);
-        console.log("BiuBiuPremium deterministic address:", predicted);
+        console.log("BiuBiuVault deterministic address:", predicted);
         console.log("Salt:", uint256(salt));
         console.log("Bytecode hash:", uint256(keccak256(bytecode)));
     }

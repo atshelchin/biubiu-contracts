@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {TokenSweep} from "../src/TokenSweep.sol";
+import {TokenSweep} from "../src/tools/TokenSweep.sol";
 
 contract TokenSweepScript is Script {
     // CREATE2 Deterministic deployment proxy
@@ -25,7 +25,7 @@ contract TokenSweepScript is Script {
         console.log("=== TokenSweep Deployment ===");
         console.log("TokenSweep deployed at:", address(tokenSweep));
         console.log("Premium contract:", address(tokenSweep.PREMIUM_CONTRACT()));
-        console.log("Owner address:", tokenSweep.OWNER());
+        console.log("Vault address:", tokenSweep.VAULT());
         console.log("Non-member fee:", tokenSweep.NON_MEMBER_FEE());
         console.log("============================");
 

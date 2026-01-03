@@ -2,17 +2,17 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {BiuBiuPremium} from "../src/BiuBiuPremium.sol";
+import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 
 contract BiuBiuPremiumTest is Test {
     BiuBiuPremium public premium;
-    address public owner = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+    address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
     address public user1 = address(0x1);
     address public user2 = address(0x2);
     address public referrer = address(0x3);
 
     function setUp() public {
-        premium = new BiuBiuPremium();
+        premium = new BiuBiuPremium(vault);
         vm.deal(user1, 100 ether);
         vm.deal(user2, 100 ether);
     }
@@ -25,7 +25,7 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.DAILY_DURATION(), 1 days);
         assertEq(premium.MONTHLY_DURATION(), 30 days);
         assertEq(premium.YEARLY_DURATION(), 365 days);
-        assertEq(premium.OWNER(), owner);
+        assertEq(premium.VAULT(), vault);
     }
 
     // Test ERC721 basics
@@ -40,12 +40,12 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeDailyNoReferrer() public {
         vm.startPrank(user1);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
 
         premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         // Owner receives payment automatically
-        assertEq(owner.balance, ownerBalanceBefore + 0.01 ether);
+        assertEq(vault.balance, vaultBalanceBefore + 0.01 ether);
 
         // Check NFT was minted
         assertEq(premium.balanceOf(user1), 1);
@@ -67,13 +67,13 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeMonthlyWithReferrer() public {
         vm.startPrank(user1);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
 
         premium.subscribe{value: 0.05 ether}(BiuBiuPremium.SubscriptionTier.Monthly, referrer);
 
         // Check payments split 50/50
-        assertEq(owner.balance, ownerBalanceBefore + 0.025 ether);
+        assertEq(vault.balance, vaultBalanceBefore + 0.025 ether);
         assertEq(referrer.balance, referrerBalanceBefore + 0.025 ether);
 
         // Check subscription info
@@ -158,13 +158,13 @@ contract BiuBiuPremiumTest is Test {
     function testSelfReferralNoCommission() public {
         vm.startPrank(user1);
 
-        uint256 ownerBalanceBefore = owner.balance;
+        uint256 vaultBalanceBefore = vault.balance;
 
         // User1 tries to refer themselves
         premium.subscribe{value: 0.01 ether}(BiuBiuPremium.SubscriptionTier.Daily, user1);
 
         // Owner receives full payment (no referral commission)
-        assertEq(owner.balance, ownerBalanceBefore + 0.01 ether);
+        assertEq(vault.balance, vaultBalanceBefore + 0.01 ether);
 
         // Subscription still succeeds
         (bool isPremium,,) = premium.getSubscriptionInfo(user1);
@@ -367,54 +367,6 @@ contract BiuBiuPremiumTest is Test {
         // Check NFT ownership
         assertEq(premium.ownerOf(1), user1);
         assertEq(premium.ownerOf(2), user2);
-    }
-
-    // Test backup owner withdrawal (when auto-transfer fails)
-    function testBackupOwnerWithdrawal() public {
-        // Simulate someone accidentally sending ETH directly to contract
-        vm.deal(user1, 1 ether);
-        vm.prank(user1);
-        (bool sent,) = address(premium).call{value: 1 ether}("");
-        require(sent, "Failed to send Ether");
-
-        // Check contract balance
-        assertEq(address(premium).balance, 1 ether);
-
-        uint256 ownerBalanceBefore = owner.balance;
-
-        // Owner uses backup withdrawal (address(0) = ETH)
-        vm.prank(owner);
-        premium.ownerWithdraw(address(0));
-
-        // Check balances after withdrawal
-        assertEq(address(premium).balance, 0);
-        assertEq(owner.balance, ownerBalanceBefore + 1 ether);
-    }
-
-    // Test anyone can call withdraw (but funds go to owner)
-    function testAnyoneCanCallWithdraw() public {
-        // Send ETH to contract
-        vm.deal(user2, 1 ether);
-        vm.prank(user2);
-        (bool sent,) = address(premium).call{value: 1 ether}("");
-        require(sent, "Failed to send Ether");
-
-        uint256 ownerBalanceBefore = owner.balance;
-
-        // User1 (not owner) calls withdraw, but funds go to owner
-        vm.prank(user1);
-        premium.ownerWithdraw(address(0));
-
-        // Owner receives the funds
-        assertEq(owner.balance, ownerBalanceBefore + 1 ether);
-        assertEq(address(premium).balance, 0);
-    }
-
-    // Test withdraw with no balance
-    function testWithdrawNoBalance() public {
-        vm.prank(owner);
-        vm.expectRevert(BiuBiuPremium.NoBalanceToWithdraw.selector);
-        premium.ownerWithdraw(address(0));
     }
 
     // Test nextTokenId
@@ -718,35 +670,6 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(user1);
         vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
         premium.transferFrom(user2, referrer, 1); // user2 doesn't own token 1
-    }
-
-    // Test ERC20 withdrawal
-    function testERC20Withdrawal() public {
-        // Deploy a mock ERC20
-        MockERC20 token = new MockERC20();
-
-        // Mint tokens to the premium contract
-        token.mint(address(premium), 1000 ether);
-
-        assertEq(token.balanceOf(address(premium)), 1000 ether);
-
-        uint256 ownerTokenBalanceBefore = token.balanceOf(owner);
-
-        // Anyone can call withdraw, but tokens go to owner
-        vm.prank(user1);
-        premium.ownerWithdraw(address(token));
-
-        assertEq(token.balanceOf(address(premium)), 0);
-        assertEq(token.balanceOf(owner), ownerTokenBalanceBefore + 1000 ether);
-    }
-
-    // Test ERC20 withdrawal with zero balance
-    function testERC20WithdrawalNoBalance() public {
-        MockERC20 token = new MockERC20();
-
-        vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NoBalanceToWithdraw.selector);
-        premium.ownerWithdraw(address(token));
     }
 
     // Test supportsInterface for ERC721Metadata

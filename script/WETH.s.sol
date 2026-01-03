@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {WETH} from "../src/WETH.sol";
+import {WETH} from "../src/core/WETH.sol";
 
 contract WETHScript is Script {
     // CREATE2 Deterministic deployment proxy

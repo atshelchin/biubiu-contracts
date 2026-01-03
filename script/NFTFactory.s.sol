@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {NFTFactory} from "../src/NFTFactory.sol";
+import {NFTFactory} from "../src/tools/NFTFactory.sol";
 
 contract NFTFactoryScript is Script {
     // CREATE2 Deterministic deployment proxy

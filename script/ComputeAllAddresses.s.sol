@@ -2,13 +2,14 @@
 pragma solidity ^0.8.13;
 
 import {Script, console} from "forge-std/Script.sol";
-import {TokenFactory} from "../src/TokenFactory.sol";
-import {NFTFactory} from "../src/NFTFactory.sol";
-import {NFTMetadata} from "../src/NFTMetadata.sol";
-import {WETH} from "../src/WETH.sol";
-import {TokenDistribution} from "../src/TokenDistribution.sol";
-import {TokenSweep} from "../src/TokenSweep.sol";
-import {BiuBiuPremium} from "../src/BiuBiuPremium.sol";
+import {TokenFactory} from "../src/tools/TokenFactory.sol";
+import {NFTFactory} from "../src/tools/NFTFactory.sol";
+import {NFTMetadata} from "../src/tools/NFTMetadata.sol";
+import {WETH} from "../src/core/WETH.sol";
+import {TokenDistribution} from "../src/tools/TokenDistribution.sol";
+import {TokenSweep} from "../src/tools/TokenSweep.sol";
+import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
+import {BiuBiuVault} from "../src/core/BiuBiuVault.sol";
 
 /// @title ComputeAllAddresses
 /// @notice Computes deterministic CREATE2 addresses for all contracts in src/
@@ -58,6 +59,9 @@ contract ComputeAllAddressesScript is Script {
         // BiuBiuPremium
         _printContractInfo("BiuBiuPremium", type(BiuBiuPremium).creationCode, salt);
 
+        // BiuBiuVault
+        _printContractInfo("BiuBiuVault", type(BiuBiuVault).creationCode, salt);
+
         console.log("-------------------------------------");
         console.log("");
         console.log("Usage: Update hardcoded addresses in contracts");
@@ -103,6 +107,8 @@ contract ComputeAllAddressesScript is Script {
             return _computeCreate2Address(type(TokenSweep).creationCode, salt);
         } else if (keccak256(bytes(contractName)) == keccak256(bytes("BiuBiuPremium"))) {
             return _computeCreate2Address(type(BiuBiuPremium).creationCode, salt);
+        } else if (keccak256(bytes(contractName)) == keccak256(bytes("BiuBiuVault"))) {
+            return _computeCreate2Address(type(BiuBiuVault).creationCode, salt);
         }
         revert("Unknown contract name");
     }
@@ -110,7 +116,7 @@ contract ComputeAllAddressesScript is Script {
     /// @notice Get all contract addresses as a struct array
     function getAllAddresses() external pure returns (ContractInfo[] memory) {
         bytes32 salt = bytes32(uint256(0));
-        ContractInfo[] memory contracts = new ContractInfo[](7);
+        ContractInfo[] memory contracts = new ContractInfo[](8);
 
         bytes memory wethBytecode = type(WETH).creationCode;
         contracts[0] = ContractInfo({
@@ -166,6 +172,14 @@ contract ComputeAllAddressesScript is Script {
             predictedAddress: _computeCreate2Address(bbpBytecode, salt),
             bytecodeHash: keccak256(bbpBytecode),
             bytecodeLength: bbpBytecode.length
+        });
+
+        bytes memory bbvBytecode = type(BiuBiuVault).creationCode;
+        contracts[7] = ContractInfo({
+            name: "BiuBiuVault",
+            predictedAddress: _computeCreate2Address(bbvBytecode, salt),
+            bytecodeHash: keccak256(bbvBytecode),
+            bytecodeLength: bbvBytecode.length
         });
 
         return contracts;

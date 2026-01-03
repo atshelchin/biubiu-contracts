@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {TokenDistribution} from "../src/TokenDistribution.sol";
-import {WETH} from "../src/WETH.sol";
+import {TokenDistribution} from "../src/tools/TokenDistribution.sol";
+import {WETH} from "../src/core/WETH.sol";
 
 // Mock contracts for testing
 contract MockERC20 {
@@ -80,6 +80,11 @@ contract MockERC1155 {
 
 contract MockBiuBiuPremium {
     mapping(address => bool) public isPremium;
+    address public VAULT;
+
+    constructor(address _vault) {
+        VAULT = _vault;
+    }
 
     function setPremium(address user, bool status) external {
         isPremium[user] = status;
@@ -104,7 +109,7 @@ contract TokenDistributionTest is Test {
     address public charlie = address(0x4);
     address public referrer = address(0x5);
     address public executor = address(0x6);
-    address constant PROTOCOL_OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+    address constant VAULT = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
 
     uint256 public ownerPrivateKey = 0x1234;
     address public ownerFromKey;
@@ -133,18 +138,14 @@ contract TokenDistributionTest is Test {
     event ReferralPaid(address indexed referrer, uint256 amount);
 
     function setUp() public {
-        // Deploy mock premium contract at the expected address
-        mockPremium = new MockBiuBiuPremium();
-        vm.etch(0x61Ae52Bb677847853DB30091ccc32d9b68878B71, address(mockPremium).code);
-        mockPremium = MockBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
+        // Deploy mock premium contract with VAULT address
+        mockPremium = new MockBiuBiuPremium(VAULT);
 
-        // Deploy WETH at expected address
+        // Deploy WETH
         weth = new WETH();
-        vm.etch(0xFe7291380b8Dc405fEf345222f2De2408A6CA18e, address(weth).code);
-        weth = WETH(payable(0xFe7291380b8Dc405fEf345222f2De2408A6CA18e));
 
-        // Deploy TokenDistribution
-        distribution = new TokenDistribution();
+        // Deploy TokenDistribution with premium and weth addresses
+        distribution = new TokenDistribution(address(mockPremium), address(weth));
 
         // Deploy mock tokens
         mockToken = new MockERC20();
@@ -161,7 +162,7 @@ contract TokenDistributionTest is Test {
         vm.deal(charlie, 100 ether);
         vm.deal(executor, 100 ether);
         vm.deal(ownerFromKey, 100 ether);
-        vm.deal(PROTOCOL_OWNER, 0);
+        vm.deal(VAULT, 0);
     }
 
     // ============ Helper Functions ============
@@ -333,7 +334,7 @@ contract TokenDistributionTest is Test {
 
         TokenDistribution.Recipient[] memory recipients = _createRecipients(2, 1 ether);
 
-        uint256 protocolOwnerBalanceBefore = PROTOCOL_OWNER.balance;
+        uint256 protocolOwnerBalanceBefore = VAULT.balance;
 
         vm.prank(alice);
         distribution.distribute{value: 2 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, address(0));
@@ -343,7 +344,7 @@ contract TokenDistributionTest is Test {
         assertEq(address(uint160(0x1001)).balance, 1 ether);
 
         // Protocol owner received fee
-        assertGt(PROTOCOL_OWNER.balance, protocolOwnerBalanceBefore);
+        assertGt(VAULT.balance, protocolOwnerBalanceBefore);
     }
 
     function test_DistributeETH_WithReferrer() public {
@@ -624,14 +625,14 @@ contract TokenDistributionTest is Test {
         uint8[] memory proofLengths = new uint8[](1);
         proofLengths[0] = 0;
 
-        uint256 protocolOwnerBefore = PROTOCOL_OWNER.balance;
+        uint256 protocolOwnerBefore = VAULT.balance;
 
         vm.prank(executor);
         distribution.distributeWithAuth{value: NON_MEMBER_FEE}(
             auth, signature, 0, recipients, allProofs, proofLengths, address(0)
         );
 
-        assertGt(PROTOCOL_OWNER.balance, protocolOwnerBefore);
+        assertGt(VAULT.balance, protocolOwnerBefore);
     }
 
     function test_DistributeWithAuth_DeadlineExpiredReverts() public {
@@ -968,42 +969,6 @@ contract TokenDistributionTest is Test {
         distribution.distribute{value: 1 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, referrer);
     }
 
-    // ============ Owner Withdraw Tests ============
-
-    function test_OwnerWithdrawETH() public {
-        // Send some ETH to the contract
-        vm.deal(address(distribution), 1 ether);
-
-        uint256 ownerBalanceBefore = PROTOCOL_OWNER.balance;
-
-        distribution.ownerWithdraw(address(0));
-
-        assertEq(PROTOCOL_OWNER.balance, ownerBalanceBefore + 1 ether);
-        assertEq(address(distribution).balance, 0);
-    }
-
-    function test_OwnerWithdrawETH_NoBalance() public {
-        vm.expectRevert(TokenDistribution.WithdrawalFailed.selector);
-        distribution.ownerWithdraw(address(0));
-    }
-
-    function test_OwnerWithdrawERC20() public {
-        // Mint tokens to the distribution contract
-        mockToken.mint(address(distribution), 100 ether);
-
-        uint256 ownerBalanceBefore = mockToken.balanceOf(PROTOCOL_OWNER);
-
-        distribution.ownerWithdraw(address(mockToken));
-
-        assertEq(mockToken.balanceOf(PROTOCOL_OWNER), ownerBalanceBefore + 100 ether);
-        assertEq(mockToken.balanceOf(address(distribution)), 0);
-    }
-
-    function test_OwnerWithdrawERC20_NoBalance() public {
-        vm.expectRevert(TokenDistribution.WithdrawalFailed.selector);
-        distribution.ownerWithdraw(address(mockToken));
-    }
-
     // ============ Proof Length Validation Tests ============
 
     function test_DistributeWithAuth_InvalidProofLengthReverts() public {
@@ -1048,7 +1013,7 @@ contract TokenDistributionTest is Test {
         TokenDistribution.Recipient[] memory recipients = _createRecipients(1, 0.1 ether);
 
         uint256 referrerBalanceBefore = referrer.balance;
-        uint256 ownerBalanceBefore = PROTOCOL_OWNER.balance;
+        uint256 ownerBalanceBefore = VAULT.balance;
 
         vm.prank(alice);
         distribution.distribute{value: 0.1 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, referrer);
@@ -1056,6 +1021,6 @@ contract TokenDistributionTest is Test {
         // Referrer should get exactly 50%
         assertEq(referrer.balance, referrerBalanceBefore + NON_MEMBER_FEE / 2);
         // Owner should get the remaining 50%
-        assertEq(PROTOCOL_OWNER.balance, ownerBalanceBefore + NON_MEMBER_FEE / 2);
+        assertEq(VAULT.balance, ownerBalanceBefore + NON_MEMBER_FEE / 2);
     }
 }

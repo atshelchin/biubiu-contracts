@@ -23,6 +23,7 @@ interface IBiuBiuPremium {
         external
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
+    function VAULT() external view returns (address);
 }
 
 /// @title TokenDistribution
@@ -30,12 +31,26 @@ interface IBiuBiuPremium {
 /// @dev Supports self-execute and delegated execute modes with Merkle tree verification
 /// @dev Part of BiuBiu Tools - https://biubiu.tools
 contract TokenDistribution {
+    // Immutables (set via constructor for cross-chain deterministic deployment)
+    IBiuBiuPremium public immutable PREMIUM_CONTRACT;
+    IWETH public immutable WETH;
+
     // Constants
-    IBiuBiuPremium public constant PREMIUM_CONTRACT = IBiuBiuPremium(0x61Ae52Bb677847853DB30091ccc32d9b68878B71);
-    IWETH public constant WETH = IWETH(0xFe7291380b8Dc405fEf345222f2De2408A6CA18e);
     uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     uint256 public constant MAX_BATCH_SIZE = 100;
-    address public constant OWNER = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
+
+    constructor(address _premiumContract, address _weth) {
+        PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
+        WETH = IWETH(_weth);
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(DOMAIN_TYPEHASH, keccak256("TokenDistribution"), keccak256("1"), block.chainid, address(this))
+        );
+    }
+
+    /// @notice Get the vault address from PREMIUM_CONTRACT
+    function VAULT() public view returns (address) {
+        return PREMIUM_CONTRACT.VAULT();
+    }
 
     // Token types
     uint8 public constant TOKEN_TYPE_WETH = 0;
@@ -111,7 +126,6 @@ contract TokenDistribution {
     error TransferFailed();
     error ETHTransferFailed();
     error RefundFailed();
-    error WithdrawalFailed();
 
     // Events
     event Distributed(
@@ -134,12 +148,6 @@ contract TokenDistribution {
     event Refunded(address indexed to, uint256 amount);
     event FeeCollected(address indexed payer, uint256 amount);
     event ReferralPaid(address indexed referrer, uint256 amount);
-
-    constructor() {
-        DOMAIN_SEPARATOR = keccak256(
-            abi.encode(DOMAIN_TYPEHASH, keccak256("TokenDistribution"), keccak256("1"), block.chainid, address(this))
-        );
-    }
 
     modifier nonReentrant() {
         if (_locked != 1) revert ReentrancyDetected();
@@ -440,7 +448,7 @@ contract TokenDistribution {
         }
 
         if (ownerAmount > 0) {
-            (bool success,) = payable(OWNER).call{value: ownerAmount}("");
+            (bool success,) = payable(VAULT()).call{value: ownerAmount}("");
             if (success) {
                 emit FeeCollected(msg.sender, ownerAmount);
             }
@@ -757,31 +765,4 @@ contract TokenDistribution {
 
     /// @notice Allow contract to receive ETH
     receive() external payable {}
-
-    /// @notice Withdraw stuck ETH or ERC20 tokens to OWNER
-    /// @param token Token address (address(0) for ETH)
-    /// @dev Can be called by anyone, but funds always go to OWNER
-    function ownerWithdraw(address token) external nonReentrant {
-        if (token == address(0)) {
-            uint256 balance = address(this).balance;
-            if (balance == 0) revert WithdrawalFailed();
-            (bool success,) = payable(OWNER).call{value: balance}("");
-            if (!success) revert WithdrawalFailed();
-        } else {
-            // Get balance using staticcall
-            (bool success, bytes memory data) =
-                token.staticcall(abi.encodeWithSelector(bytes4(keccak256("balanceOf(address)")), address(this)));
-            if (!success || data.length < 32) revert WithdrawalFailed();
-
-            uint256 balance = abi.decode(data, (uint256));
-            if (balance == 0) revert WithdrawalFailed();
-
-            // Transfer using transfer(address,uint256)
-            (success, data) =
-                token.call(abi.encodeWithSelector(bytes4(keccak256("transfer(address,uint256)")), OWNER, balance));
-            // For tokens that don't return bool, check if call succeeded
-            if (!success) revert WithdrawalFailed();
-            if (data.length > 0 && !abi.decode(data, (bool))) revert WithdrawalFailed();
-        }
-    }
 }
