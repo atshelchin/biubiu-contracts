@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {BiuBiuShare} from "../src/core/BiuBiuShare.sol";
+import {IBiuBiuShare} from "../src/interfaces/IBiuBiuShare.sol";
 
 contract BiuBiuShareTest is Test {
     BiuBiuShare public token;
@@ -54,7 +55,7 @@ contract BiuBiuShareTest is Test {
 
     function test_TransferEmitsEvent() public {
         vm.expectEmit(true, true, false, true);
-        emit BiuBiuShare.Transfer(FOUNDER, alice, 100_000);
+        emit IBiuBiuShare.Transfer(FOUNDER, alice, 100_000);
 
         vm.prank(FOUNDER);
         token.transfer(alice, 100_000);
@@ -92,7 +93,7 @@ contract BiuBiuShareTest is Test {
 
     function test_ApproveEmitsEvent() public {
         vm.expectEmit(true, true, false, true);
-        emit BiuBiuShare.Approval(FOUNDER, alice, 100_000);
+        emit IBiuBiuShare.Approval(FOUNDER, alice, 100_000);
 
         vm.prank(FOUNDER);
         token.approve(alice, 100_000);
@@ -134,7 +135,7 @@ contract BiuBiuShareTest is Test {
         token.approve(alice, 100_000);
 
         vm.expectEmit(true, true, false, true);
-        emit BiuBiuShare.Transfer(FOUNDER, bob, 50_000);
+        emit IBiuBiuShare.Transfer(FOUNDER, bob, 50_000);
 
         vm.prank(alice);
         token.transferFrom(FOUNDER, bob, 50_000);

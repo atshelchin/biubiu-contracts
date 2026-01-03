@@ -11,8 +11,8 @@ contract NFTFactoryTest is Test {
     NFTMetadata public metadata;
     BiuBiuPremium public premium;
 
-    // The expected METADATA_CONTRACT address in SocialNFT
-    address constant METADATA_CONTRACT_ADDR = 0xF68B52ceEAFb4eDB2320E44Efa0be2EBe7a715A6;
+    // NFTMetadata contract address
+    address public metadataAddr;
 
     address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
     address public alice = address(0x1);
@@ -33,11 +33,9 @@ contract NFTFactoryTest is Test {
 
     function setUp() public {
         premium = new BiuBiuPremium(vault);
-        factory = new NFTFactory(address(premium));
-
-        // Deploy NFTMetadata and etch it to the expected address
         metadata = new NFTMetadata();
-        vm.etch(METADATA_CONTRACT_ADDR, address(metadata).code);
+        metadataAddr = address(metadata);
+        factory = new NFTFactory(address(premium), metadataAddr);
     }
 
     // ========== Collection Creation Tests ==========

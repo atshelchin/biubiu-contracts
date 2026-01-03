@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IBiuBiuShare} from "../interfaces/IBiuBiuShare.sol";
+
 /**
  * @title BiuBiuShare
  * @notice ERC20 DAO token for BiuBiuVault revenue distribution
  * @dev Fixed supply minted to founder at deployment
  */
-contract BiuBiuShare {
+contract BiuBiuShare is IBiuBiuShare {
     string public constant name = "BiuBiu Share";
     string public constant symbol = "BBS";
     uint8 public constant decimals = 0;
@@ -15,9 +17,6 @@ contract BiuBiuShare {
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
 
     error InsufficientBalance();
     error InsufficientAllowance();

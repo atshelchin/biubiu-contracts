@@ -31,6 +31,7 @@ interface INFTFactory {
     // ============ State Variables ============
 
     function PREMIUM_CONTRACT() external view returns (IBiuBiuPremium);
+    function METADATA_CONTRACT() external view returns (address);
     function VAULT() external view returns (address);
     function NON_MEMBER_FEE() external view returns (uint256);
     function totalFreeUsage() external view returns (uint256);

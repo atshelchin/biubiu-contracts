@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {INFTMetadata} from "../interfaces/INFTMetadata.sol";
+
 /**
  * @title NFTMetadata
  * @notice On-chain NFT metadata with SVG
  * @dev Part of BiuBiu Tools
  */
-contract NFTMetadata {
+contract NFTMetadata is INFTMetadata {
     string[4] internal R = ["Common", "Rare", "Legendary", "Epic"];
 
     // [primary, secondary, accent, glow]

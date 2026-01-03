@@ -12,9 +12,11 @@ import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 contract NFTFactory is INFTFactory {
     // Immutables (set via constructor for cross-chain deterministic deployment)
     IBiuBiuPremium public immutable PREMIUM_CONTRACT;
+    address public immutable METADATA_CONTRACT;
 
-    constructor(address _premiumContract) {
+    constructor(address _premiumContract, address _metadataContract) {
         PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
+        METADATA_CONTRACT = _metadataContract;
     }
 
     /// @notice Get the vault address from PREMIUM_CONTRACT
@@ -109,7 +111,7 @@ contract NFTFactory is INFTFactory {
 
         bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, externalURL));
 
-        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, externalURL, msg.sender);
+        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, externalURL, msg.sender, METADATA_CONTRACT);
 
         address nftAddress = address(nft);
         allNFTs.push(nftAddress);
@@ -259,8 +261,8 @@ interface INFTMetadata {
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract SocialNFT {
-    // NFTMetadata contract address (deployed separately)
-    address public constant METADATA_CONTRACT = 0xF68B52ceEAFb4eDB2320E44Efa0be2EBe7a715A6; // TODO: Set after deployment
+    // NFTMetadata contract address (deployed separately, passed via constructor)
+    address public immutable METADATA_CONTRACT;
 
     // Collection info
     string public name;
@@ -340,13 +342,15 @@ contract SocialNFT {
         string memory _symbol,
         string memory _collectionDescription,
         string memory _externalURL,
-        address _owner
+        address _owner,
+        address _metadataContract
     ) {
         name = _name;
         symbol = _symbol;
         collectionDescription = _collectionDescription;
         externalURL = _externalURL;
         owner = _owner;
+        METADATA_CONTRACT = _metadataContract;
     }
 
     // ============ Mint Functions ============
