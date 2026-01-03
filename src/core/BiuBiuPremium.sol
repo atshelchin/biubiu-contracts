@@ -52,6 +52,9 @@ contract BiuBiuPremium {
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
 
+    // Non-member fee for tool contracts
+    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
+
     // Vault address for revenue distribution (set via constructor)
     address public immutable VAULT;
 

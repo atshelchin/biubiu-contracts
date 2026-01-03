@@ -7,6 +7,7 @@ interface IBiuBiuPremium {
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
     function VAULT() external view returns (address);
+    function NON_MEMBER_FEE() external view returns (uint256);
 }
 
 /**
@@ -117,9 +118,6 @@ contract TokenFactory {
     // Immutables (set via constructor for cross-chain deterministic deployment)
     IBiuBiuPremium public immutable PREMIUM_CONTRACT;
 
-    // Constants
-    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
-
     constructor(address _premiumContract) {
         PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
     }
@@ -127,6 +125,11 @@ contract TokenFactory {
     /// @notice Get the vault address from PREMIUM_CONTRACT
     function VAULT() public view returns (address) {
         return PREMIUM_CONTRACT.VAULT();
+    }
+
+    /// @notice Get the non-member fee from PREMIUM_CONTRACT
+    function NON_MEMBER_FEE() public view returns (uint256) {
+        return PREMIUM_CONTRACT.NON_MEMBER_FEE();
     }
 
     // Usage types
@@ -262,7 +265,7 @@ contract TokenFactory {
         }
 
         // Non-member must pay
-        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+        if (msg.value < NON_MEMBER_FEE()) revert InsufficientPayment();
 
         totalPaidUsage++;
 

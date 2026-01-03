@@ -24,6 +24,7 @@ interface IBiuBiuPremium {
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime);
     function VAULT() external view returns (address);
+    function NON_MEMBER_FEE() external view returns (uint256);
 }
 
 /// @title TokenDistribution
@@ -36,7 +37,6 @@ contract TokenDistribution {
     IWETH public immutable WETH;
 
     // Constants
-    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
     uint256 public constant MAX_BATCH_SIZE = 100;
 
     constructor(address _premiumContract, address _weth) {
@@ -50,6 +50,11 @@ contract TokenDistribution {
     /// @notice Get the vault address from PREMIUM_CONTRACT
     function VAULT() public view returns (address) {
         return PREMIUM_CONTRACT.VAULT();
+    }
+
+    /// @notice Get the non-member fee from PREMIUM_CONTRACT
+    function NON_MEMBER_FEE() public view returns (uint256) {
+        return PREMIUM_CONTRACT.NON_MEMBER_FEE();
     }
 
     // Token types
@@ -250,11 +255,12 @@ contract TokenDistribution {
         }
 
         // Non-member must pay
-        if (availableETH < NON_MEMBER_FEE) revert InsufficientPayment();
-        availableETH -= NON_MEMBER_FEE;
+        uint256 fee = NON_MEMBER_FEE();
+        if (availableETH < fee) revert InsufficientPayment();
+        availableETH -= fee;
 
         totalPaidUsage++;
-        _collectFee(NON_MEMBER_FEE, referrer);
+        _collectFee(fee, referrer);
 
         return (USAGE_PAID, availableETH);
     }
@@ -361,10 +367,11 @@ contract TokenDistribution {
         }
 
         // Non-member must pay
-        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
+        uint256 fee = NON_MEMBER_FEE();
+        if (msg.value < fee) revert InsufficientPayment();
 
         totalPaidAuthUsage++;
-        _collectFee(NON_MEMBER_FEE, referrer);
+        _collectFee(fee, referrer);
 
         return USAGE_PAID;
     }

@@ -81,6 +81,7 @@ contract MockERC1155 {
 contract MockBiuBiuPremium {
     mapping(address => bool) public isPremium;
     address public VAULT;
+    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
 
     constructor(address _vault) {
         VAULT = _vault;
