@@ -60,7 +60,15 @@ contract ComputeAllAddressesScript is Script {
         _printContractInfo("BiuBiuPremium", type(BiuBiuPremium).creationCode, salt);
 
         // BiuBiuVault
+        address biubiuVaultAddr = _computeCreate2Address(type(BiuBiuVault).creationCode, salt);
         _printContractInfo("BiuBiuVault", type(BiuBiuVault).creationCode, salt);
+
+        // BiuBiuShare (deployed by BiuBiuVault constructor via CREATE with nonce=1)
+        address biubiuShareAddr = _computeCreateAddress(biubiuVaultAddr, 1);
+        console.log("");
+        console.log("BiuBiuShare");
+        console.log("  Address:", biubiuShareAddr);
+        console.log("  (Deployed by BiuBiuVault via CREATE)");
 
         console.log("-------------------------------------");
         console.log("");
@@ -85,6 +93,12 @@ contract ComputeAllAddressesScript is Script {
     function _computeCreate2Address(bytes memory bytecode, bytes32 salt) internal pure returns (address) {
         bytes32 hash = keccak256(abi.encodePacked(bytes1(0xff), CREATE2_PROXY, salt, keccak256(bytecode)));
         return address(uint160(uint256(hash)));
+    }
+
+    function _computeCreateAddress(address deployer, uint256 nonce) internal pure returns (address) {
+        // For nonce = 1: RLP([deployer, 0x01])
+        bytes memory data = abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, bytes1(0x01));
+        return address(uint160(uint256(keccak256(data))));
     }
 
     /// @notice Get the predicted address for a specific contract
