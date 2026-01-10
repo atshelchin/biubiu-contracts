@@ -60,14 +60,14 @@ All contracts use CREATE2 for deterministic deployment addresses across any EVM 
 | Contract | Address | Note |
 |----------|---------|------|
 | WETH | `0x8c818450FD5C285923e76Be0dd0160Ad83dF396C` | |
-| BiuBiuPremium | `0x8A4859c4D40854E477c3bFfA7E00202119957C05` | |
+| BiuBiuPremium | `0xaAf581eC0CE6680903871E84FCE1af46bb7bC77e` | |
 | BiuBiuVault | `0x6233BE8a53D878B8cCbDA35692Ee901C3201032C` | |
 | BiuBiuShare | `0x58CF0902133F6965f3E28FB4BD54AdfcA9295806` | Deployed by BiuBiuVault |
 | NFTMetadata | `0x4380Ccb96103bDcA6839be9710c997C59f9b8954` | |
-| TokenFactory | `0xC690EF44005225f41a6018e28Bc1D01a960E0758` | |
-| NFTFactory | `0xf9EcB06a63CFbe292c1a97810507192003668171` | |
-| TokenDistribution | `0x7B7B58681C34F2FD52825BF826031c39C065f650` | |
-| TokenSweep | `0x9b1d7b990797894E3E3233Ec0A24968E4d0dDaa9` | |
+| TokenFactory | `0x05a0056b59B63CDB9bfb52Aa04464808124877eF` | |
+| NFTFactory | `0x4B6EC4225af83ea83921d3E73B7a956676571213` | |
+| TokenDistribution | `0x00D0dB4F0Bd0A04C78F442Fa70B16061A3f49e0D` | |
+| TokenSweep | `0x8C008c0BC4a23EA2d39B887b414628B84E7Cba5c` | |
 
 ## Interfaces
 

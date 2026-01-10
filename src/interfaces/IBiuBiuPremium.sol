@@ -31,8 +31,10 @@ interface IBiuBiuPremium {
     event ReferralPaid(address indexed referrer, uint256 amount);
     event Activated(address indexed user, uint256 indexed tokenId);
     event Deactivated(address indexed user, uint256 indexed tokenId);
+    event PricesUpdated(uint256 dailyPrice, uint256 monthlyPrice, uint256 yearlyPrice);
+    event NonMemberFeeUpdated(uint256 fee);
 
-    // ============ Constants ============
+    // ============ Pricing (mutable by admin) ============
 
     function DAILY_PRICE() external view returns (uint256);
     function MONTHLY_PRICE() external view returns (uint256);
@@ -42,6 +44,12 @@ interface IBiuBiuPremium {
     function YEARLY_DURATION() external view returns (uint256);
     function NON_MEMBER_FEE() external view returns (uint256);
     function VAULT() external view returns (address);
+    function admin() external view returns (address);
+
+    // ============ Admin Functions ============
+
+    function setPrices(uint256 dailyPrice, uint256 monthlyPrice, uint256 yearlyPrice) external;
+    function setNonMemberFee(uint256 fee) external;
 
     // ============ ERC721 Standard ============
 

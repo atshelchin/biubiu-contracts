@@ -19,6 +19,7 @@ contract BiuBiuPremium is IBiuBiuPremium {
     error InvalidAddress();
     error NotApproved();
     error TransferToNonReceiver();
+    error NotAdmin();
 
     // Reentrancy guard
     uint256 private _locked = 1;
@@ -37,24 +38,56 @@ contract BiuBiuPremium is IBiuBiuPremium {
     mapping(uint256 => address) private _tokenApprovals;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-    // Tier pricing (immutable for gas optimization)
-    uint256 public constant DAILY_PRICE = 0.01 ether;
-    uint256 public constant MONTHLY_PRICE = 0.05 ether;
-    uint256 public constant YEARLY_PRICE = 0.1 ether;
+    // Non-member fee for tool contracts (mutable by admin)
+    uint256 public NON_MEMBER_FEE = 0.01 ether;
 
-    // Tier duration
+    // Tier pricing (mutable by admin)
+    uint256 public DAILY_PRICE = 0.05 ether;
+    uint256 public MONTHLY_PRICE = 0.25 ether;
+    uint256 public YEARLY_PRICE = 1.25 ether;
+
+    // Tier duration (constant)
     uint256 public constant DAILY_DURATION = 1 days;
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
 
-    // Non-member fee for tool contracts
-    uint256 public constant NON_MEMBER_FEE = 0.005 ether;
+    // Admin address (can update prices)
+    address public constant admin = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
 
     // Vault address for revenue distribution (set via constructor)
     address public immutable VAULT;
 
     constructor(address _vault) {
         VAULT = _vault;
+    }
+
+    modifier onlyAdmin() {
+        if (msg.sender != admin) revert NotAdmin();
+        _;
+    }
+
+    // ============ Admin Functions ============
+
+    /**
+     * @notice Update subscription prices
+     * @param dailyPrice New daily price
+     * @param monthlyPrice New monthly price
+     * @param yearlyPrice New yearly price
+     */
+    function setPrices(uint256 dailyPrice, uint256 monthlyPrice, uint256 yearlyPrice) external onlyAdmin {
+        DAILY_PRICE = dailyPrice;
+        MONTHLY_PRICE = monthlyPrice;
+        YEARLY_PRICE = yearlyPrice;
+        emit PricesUpdated(dailyPrice, monthlyPrice, yearlyPrice);
+    }
+
+    /**
+     * @notice Update non-member fee
+     * @param fee New non-member fee
+     */
+    function setNonMemberFee(uint256 fee) external onlyAdmin {
+        NON_MEMBER_FEE = fee;
+        emit NonMemberFeeUpdated(fee);
     }
 
     // Token attributes struct
@@ -276,7 +309,7 @@ contract BiuBiuPremium is IBiuBiuPremium {
     /**
      * @notice Subscribe to a premium tier
      * @dev If user has an active subscription, renew it. Otherwise mint a new NFT and activate it.
-     * @param tier The subscription tier (Daily, Monthly, or Yearly)
+     * @param tier The subscription tier (Daily, Monthly, or Lifetime)
      * @param referrer The referrer address (use address(0) for no referrer)
      */
     function subscribe(SubscriptionTier tier, address referrer) external payable nonReentrant {
@@ -374,7 +407,7 @@ contract BiuBiuPremium is IBiuBiuPremium {
      * @return price The price in wei
      * @return duration The duration in seconds
      */
-    function _getTierInfo(SubscriptionTier tier) private pure returns (uint256 price, uint256 duration) {
+    function _getTierInfo(SubscriptionTier tier) private view returns (uint256 price, uint256 duration) {
         if (tier == SubscriptionTier.Daily) {
             return (DAILY_PRICE, DAILY_DURATION);
         } else if (tier == SubscriptionTier.Monthly) {

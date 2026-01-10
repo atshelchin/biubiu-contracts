@@ -64,13 +64,14 @@ contract TokenSweepTest is Test {
         token = new MockERC20();
 
         // Make premiumMember a premium member
+        uint256 dailyPrice = premium.DAILY_PRICE();
         vm.prank(premiumMember);
-        premium.subscribe{value: 0.01 ether}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
+        premium.subscribe{value: dailyPrice}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
     }
 
     // Test constants
     function testConstants() public view {
-        assertEq(tokenSweep.NON_MEMBER_FEE(), 0.005 ether);
+        assertEq(tokenSweep.NON_MEMBER_FEE(), 0.01 ether);
         assertEq(tokenSweep.VAULT(), vault);
     }
 
@@ -105,13 +106,14 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
         uint256 nonMemberBalanceBefore = nonMember.balance;
+        uint256 fee = premium.NON_MEMBER_FEE();
 
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
         // Vault should receive full payment
-        assertEq(vault.balance, vaultBalanceBefore + 0.005 ether);
-        assertEq(nonMember.balance, nonMemberBalanceBefore - 0.005 ether);
+        assertEq(vault.balance, vaultBalanceBefore + fee);
+        assertEq(nonMember.balance, nonMemberBalanceBefore - fee);
     }
 
     // Test non-member payment with referrer (50/50 split)
@@ -121,13 +123,14 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
+        uint256 fee = premium.NON_MEMBER_FEE();
 
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
+        tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
 
         // Referrer gets 50%, vault gets 50%
-        assertEq(referrer.balance, referrerBalanceBefore + 0.0025 ether);
-        assertEq(vault.balance, vaultBalanceBefore + 0.0025 ether);
+        assertEq(referrer.balance, referrerBalanceBefore + fee / 2);
+        assertEq(vault.balance, vaultBalanceBefore + fee / 2);
     }
 
     // Test signature authorization - premium member authorizes non-member
@@ -170,9 +173,12 @@ contract TokenSweepTest is Test {
 
         bytes memory invalidSignature = "invalid";
 
+        // Cache fee before prank (prank only affects next external call)
+        uint256 fee = premium.NON_MEMBER_FEE();
+
         vm.prank(nonMember);
         vm.expectRevert(TokenSweep.InvalidSignature.selector);
-        tokenSweep.multicall{value: 0.005 ether}(
+        tokenSweep.multicall{value: fee}(
             wallets, recipient, tokens, block.timestamp + 1 hours, address(0), invalidSignature
         );
     }
@@ -298,14 +304,15 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
         uint256 nonMemberBalanceBefore = nonMember.balance;
+        uint256 fee = premium.NON_MEMBER_FEE();
 
         // Non-member tries to refer themselves
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, nonMember, "");
+        tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, nonMember, "");
 
         // Self-referral should be ignored, vault gets full amount
-        assertEq(vault.balance, vaultBalanceBefore + 0.005 ether);
-        assertEq(nonMember.balance, nonMemberBalanceBefore - 0.005 ether);
+        assertEq(vault.balance, vaultBalanceBefore + fee);
+        assertEq(nonMember.balance, nonMemberBalanceBefore - fee);
     }
 
     // Test overpayment
@@ -315,11 +322,12 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
 
+        uint256 overpayment = 0.01 ether;
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.01 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        tokenSweep.multicall{value: overpayment}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
         // Vault receives all overpayment
-        assertEq(vault.balance, vaultBalanceBefore + 0.01 ether);
+        assertEq(vault.balance, vaultBalanceBefore + overpayment);
     }
 
     // Test expired premium membership
@@ -329,8 +337,9 @@ contract TokenSweepTest is Test {
         vm.deal(expiredMember, 100 ether);
 
         // Subscribe for 1 day
+        uint256 dailyPrice = premium.DAILY_PRICE();
         vm.prank(expiredMember);
-        premium.subscribe{value: 0.01 ether}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
+        premium.subscribe{value: dailyPrice}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
 
         // Fast forward past expiry
         vm.warp(block.timestamp + 2 days);
@@ -348,6 +357,7 @@ contract TokenSweepTest is Test {
     function testMulticallEventEmissions() public {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
+        uint256 fee = premium.NON_MEMBER_FEE();
 
         // Test premium member event (usageType = 1 = USAGE_PREMIUM)
         vm.prank(premiumMember);
@@ -358,12 +368,12 @@ contract TokenSweepTest is Test {
         // Test non-member with referrer events (usageType = 2 = USAGE_PAID)
         vm.prank(nonMember);
         vm.expectEmit(true, true, false, true);
-        emit ReferralPaid(referrer, nonMember, 0.0025 ether);
+        emit ReferralPaid(referrer, nonMember, fee / 2);
         vm.expectEmit(true, true, false, true);
-        emit VaultPaid(vault, nonMember, 0.0025 ether);
+        emit VaultPaid(vault, nonMember, fee / 2);
         vm.expectEmit(true, true, false, true);
         emit MulticallExecuted(nonMember, recipient, 0, 2);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
+        tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
     }
 
     // Test drainToAddress with multiple tokens
@@ -500,13 +510,14 @@ contract TokenSweepTest is Test {
         address[] memory tokens = new address[](0);
 
         uint256 vaultBalanceBefore = vault.balance;
+        uint256 fee = premium.NON_MEMBER_FEE();
 
-        // Non-member pays 0.005 ETH, but contract has 1 ETH already
+        // Non-member pays fee, but contract has 1 ETH already
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
 
-        // Vault should receive 1 + 0.005 = 1.005 ETH (all contract balance)
-        assertEq(vault.balance, vaultBalanceBefore + 1.005 ether);
+        // Vault should receive 1 + fee (all contract balance)
+        assertEq(vault.balance, vaultBalanceBefore + 1 ether + fee);
         assertEq(address(tokenSweep).balance, 0);
     }
 
@@ -644,10 +655,11 @@ contract TokenSweepTest is Test {
         uint256 recipientTokenBalanceBefore = token.balanceOf(recipient);
         uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
+        uint256 fee = premium.NON_MEMBER_FEE();
 
         // Non-member calls multicall with wallets and pays fee with referrer
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, deadline, referrer, "");
+        tokenSweep.multicall{value: fee}(wallets, recipient, tokens, deadline, referrer, "");
 
         // Verify all ETH was swept (10 wallets * 0.5 ETH each)
         assertEq(recipient.balance, recipientBalanceBefore + 5 ether);
@@ -656,10 +668,10 @@ contract TokenSweepTest is Test {
         assertEq(token.balanceOf(recipient), recipientTokenBalanceBefore + 500 ether);
 
         // Verify referrer got 50% of fee
-        assertEq(referrer.balance, referrerBalanceBefore + 0.0025 ether);
+        assertEq(referrer.balance, referrerBalanceBefore + fee / 2);
 
         // Verify vault got 50% of fee
-        assertEq(vault.balance, vaultBalanceBefore + 0.0025 ether);
+        assertEq(vault.balance, vaultBalanceBefore + fee / 2);
 
         // Verify sample wallets are empty
         assertEq(wallets[0].wallet.balance, 0);
@@ -809,7 +821,7 @@ contract TokenSweepTest is Test {
         // Non-member pays fee with rejecter as referrer
         vm.prank(nonMember);
         // Should succeed even though referrer rejects payment
-        tokenSweep.multicall{value: 0.005 ether}(
+        tokenSweep.multicall{value: premium.NON_MEMBER_FEE()}(
             wallets, recipient, tokens, block.timestamp + 1 hours, address(rejecter), ""
         );
 
@@ -828,10 +840,14 @@ contract TokenSweepTest is Test {
 
         // Multiple paid calls - all should succeed
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        tokenSweep.multicall{value: premium.NON_MEMBER_FEE()}(
+            wallets, recipient, tokens, block.timestamp + 1 hours, address(0), ""
+        );
 
         vm.prank(nonMember);
-        tokenSweep.multicall{value: 0.005 ether}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        tokenSweep.multicall{value: premium.NON_MEMBER_FEE()}(
+            wallets, recipient, tokens, block.timestamp + 1 hours, address(0), ""
+        );
 
         assertEq(tokenSweep.totalPaidUsage(), 2);
     }
