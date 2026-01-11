@@ -24,7 +24,6 @@ contract BiuBiuPremiumScript is Script {
 
         console.log("BiuBiuPremium deployed at:", address(premium));
         console.log("Vault address:", premium.VAULT());
-        console.log("Daily price:", premium.DAILY_PRICE());
         console.log("Monthly price:", premium.MONTHLY_PRICE());
         console.log("Yearly price:", premium.YEARLY_PRICE());
 

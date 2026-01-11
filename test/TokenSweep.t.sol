@@ -64,9 +64,9 @@ contract TokenSweepTest is Test {
         token = new MockERC20();
 
         // Make premiumMember a premium member
-        uint256 dailyPrice = premium.DAILY_PRICE();
+        uint256 monthlyPrice = premium.MONTHLY_PRICE();
         vm.prank(premiumMember);
-        premium.subscribe{value: dailyPrice}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
     // Test constants
@@ -336,13 +336,13 @@ contract TokenSweepTest is Test {
         (address expiredMember,) = makeAddrAndKey("expiredMember");
         vm.deal(expiredMember, 100 ether);
 
-        // Subscribe for 1 day
-        uint256 dailyPrice = premium.DAILY_PRICE();
+        // Subscribe for 30 days
+        uint256 monthlyPrice = premium.MONTHLY_PRICE();
         vm.prank(expiredMember);
-        premium.subscribe{value: dailyPrice}(IBiuBiuPremium.SubscriptionTier.Daily, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         // Fast forward past expiry
-        vm.warp(block.timestamp + 2 days);
+        vm.warp(block.timestamp + 31 days);
 
         // Now expired member should need to pay
         Wallet[] memory wallets = new Wallet[](0);

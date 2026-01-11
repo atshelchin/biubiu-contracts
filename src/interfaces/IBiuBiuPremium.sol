@@ -10,7 +10,6 @@ interface IBiuBiuPremium {
     // ============ Enums ============
 
     enum SubscriptionTier {
-        Daily, // 1 day
         Monthly, // 30 days
         Yearly // 365 days
     }
@@ -31,15 +30,12 @@ interface IBiuBiuPremium {
     event ReferralPaid(address indexed referrer, uint256 amount);
     event Activated(address indexed user, uint256 indexed tokenId);
     event Deactivated(address indexed user, uint256 indexed tokenId);
-    event PricesUpdated(uint256 dailyPrice, uint256 monthlyPrice, uint256 yearlyPrice);
     event NonMemberFeeUpdated(uint256 fee);
 
     // ============ Pricing (mutable by admin) ============
 
-    function DAILY_PRICE() external view returns (uint256);
     function MONTHLY_PRICE() external view returns (uint256);
     function YEARLY_PRICE() external view returns (uint256);
-    function DAILY_DURATION() external view returns (uint256);
     function MONTHLY_DURATION() external view returns (uint256);
     function YEARLY_DURATION() external view returns (uint256);
     function NON_MEMBER_FEE() external view returns (uint256);
@@ -48,7 +44,6 @@ interface IBiuBiuPremium {
 
     // ============ Admin Functions ============
 
-    function setPrices(uint256 dailyPrice, uint256 monthlyPrice, uint256 yearlyPrice) external;
     function setNonMemberFee(uint256 fee) external;
 
     // ============ ERC721 Standard ============
@@ -90,6 +85,11 @@ interface IBiuBiuPremium {
         external
         view
         returns (uint256 mintedAt, address mintedBy, uint256 renewalCount);
+
+    function getTokenLockedPrices(uint256 tokenId)
+        external
+        view
+        returns (uint256 lockedMonthlyPrice, uint256 lockedYearlyPrice);
 
     function nextTokenId() external view returns (uint256);
     function subscriptionExpiry(uint256 tokenId) external view returns (uint256);

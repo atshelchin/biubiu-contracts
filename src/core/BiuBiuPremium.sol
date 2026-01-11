@@ -38,16 +38,16 @@ contract BiuBiuPremium is IBiuBiuPremium {
     mapping(uint256 => address) private _tokenApprovals;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-    // Non-member fee for tool contracts (mutable by admin)
+    // Base fee (mutable by admin) - all prices derived from this
     uint256 public NON_MEMBER_FEE = 0.01 ether;
 
-    // Tier pricing (mutable by admin)
-    uint256 public DAILY_PRICE = 0.05 ether;
-    uint256 public MONTHLY_PRICE = 0.25 ether;
-    uint256 public YEARLY_PRICE = 1.25 ether;
+    // Price multipliers (constant)
+    // Monthly = NON_MEMBER_FEE * 5
+    // Yearly = NON_MEMBER_FEE * 15 (Monthly * 3)
+    uint256 public constant MONTHLY_MULTIPLIER = 5;
+    uint256 public constant YEARLY_MULTIPLIER = 15;
 
     // Tier duration (constant)
-    uint256 public constant DAILY_DURATION = 1 days;
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
 
@@ -66,24 +66,29 @@ contract BiuBiuPremium is IBiuBiuPremium {
         _;
     }
 
-    // ============ Admin Functions ============
+    // ============ Price Getters ============
 
     /**
-     * @notice Update subscription prices
-     * @param dailyPrice New daily price
-     * @param monthlyPrice New monthly price
-     * @param yearlyPrice New yearly price
+     * @notice Get current monthly subscription price
+     * @return Monthly price (NON_MEMBER_FEE * 5)
      */
-    function setPrices(uint256 dailyPrice, uint256 monthlyPrice, uint256 yearlyPrice) external onlyAdmin {
-        DAILY_PRICE = dailyPrice;
-        MONTHLY_PRICE = monthlyPrice;
-        YEARLY_PRICE = yearlyPrice;
-        emit PricesUpdated(dailyPrice, monthlyPrice, yearlyPrice);
+    function MONTHLY_PRICE() public view returns (uint256) {
+        return NON_MEMBER_FEE * MONTHLY_MULTIPLIER;
     }
 
     /**
-     * @notice Update non-member fee
-     * @param fee New non-member fee
+     * @notice Get current yearly subscription price
+     * @return Yearly price (NON_MEMBER_FEE * 10)
+     */
+    function YEARLY_PRICE() public view returns (uint256) {
+        return NON_MEMBER_FEE * YEARLY_MULTIPLIER;
+    }
+
+    // ============ Admin Functions ============
+
+    /**
+     * @notice Update base fee (affects all derived prices)
+     * @param fee New base fee
      */
     function setNonMemberFee(uint256 fee) external onlyAdmin {
         NON_MEMBER_FEE = fee;
@@ -95,6 +100,9 @@ contract BiuBiuPremium is IBiuBiuPremium {
         uint256 mintedAt; // First mint timestamp
         address mintedBy; // Who minted this token
         uint256 renewalCount; // Number of renewals
+        // Locked prices at mint time (for discounted renewals)
+        uint256 lockedMonthlyPrice;
+        uint256 lockedYearlyPrice;
     }
 
     // tokenId => subscription expiry time
@@ -223,6 +231,10 @@ contract BiuBiuPremium is IBiuBiuPremium {
                 _toString(attrs.renewalCount),
                 '},{"trait_type":"Expiry","display_type":"date","value":',
                 _toString(expiry),
+                '},{"trait_type":"Locked Monthly Price","display_type":"number","value":',
+                _toString(attrs.lockedMonthlyPrice),
+                '},{"trait_type":"Locked Yearly Price","display_type":"number","value":',
+                _toString(attrs.lockedYearlyPrice),
                 "}]}"
             )
         );
@@ -271,8 +283,14 @@ contract BiuBiuPremium is IBiuBiuPremium {
             emit Activated(to, tokenId);
         }
 
-        // Initialize token attributes
-        _tokenAttributes[tokenId] = TokenAttributes({mintedAt: block.timestamp, mintedBy: msg.sender, renewalCount: 0});
+        // Initialize token attributes with locked prices at mint time
+        _tokenAttributes[tokenId] = TokenAttributes({
+            mintedAt: block.timestamp,
+            mintedBy: msg.sender,
+            renewalCount: 0,
+            lockedMonthlyPrice: MONTHLY_PRICE(),
+            lockedYearlyPrice: YEARLY_PRICE()
+        });
 
         unchecked {
             _balances[to] += 1;
@@ -352,8 +370,11 @@ contract BiuBiuPremium is IBiuBiuPremium {
      * @notice Internal function to renew subscription for a tokenId
      */
     function _renewSubscription(uint256 tokenId, SubscriptionTier tier, address referrer) private {
-        // Get price and duration based on tier
-        (uint256 price, uint256 duration) = _getTierInfo(tier);
+        // Defense in depth: ensure token exists (callers should already validate)
+        if (_owners[tokenId] == address(0)) revert TokenNotExists();
+
+        // Get price and duration based on tier (uses locked prices from mint time)
+        (uint256 price, uint256 duration) = _getLockedTierInfo(tokenId, tier);
 
         // Validate payment
         if (msg.value != price) revert IncorrectPaymentAmount();
@@ -402,18 +423,23 @@ contract BiuBiuPremium is IBiuBiuPremium {
     }
 
     /**
-     * @notice Get tier pricing and duration info
+     * @notice Get tier pricing using locked prices from token mint time
+     * @dev NFT holders renew at the price locked when the NFT was minted
+     * @param tokenId The token to get locked prices for
      * @param tier The subscription tier
-     * @return price The price in wei
+     * @return price The locked price in wei
      * @return duration The duration in seconds
      */
-    function _getTierInfo(SubscriptionTier tier) private view returns (uint256 price, uint256 duration) {
-        if (tier == SubscriptionTier.Daily) {
-            return (DAILY_PRICE, DAILY_DURATION);
-        } else if (tier == SubscriptionTier.Monthly) {
-            return (MONTHLY_PRICE, MONTHLY_DURATION);
+    function _getLockedTierInfo(uint256 tokenId, SubscriptionTier tier)
+        private
+        view
+        returns (uint256 price, uint256 duration)
+    {
+        TokenAttributes storage attrs = _tokenAttributes[tokenId];
+        if (tier == SubscriptionTier.Monthly) {
+            return (attrs.lockedMonthlyPrice, MONTHLY_DURATION);
         } else {
-            return (YEARLY_PRICE, YEARLY_DURATION);
+            return (attrs.lockedYearlyPrice, YEARLY_DURATION);
         }
     }
 
@@ -471,6 +497,23 @@ contract BiuBiuPremium is IBiuBiuPremium {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
         TokenAttributes storage attrs = _tokenAttributes[tokenId];
         return (attrs.mintedAt, attrs.mintedBy, attrs.renewalCount);
+    }
+
+    /**
+     * @notice Get locked prices for a token (prices at mint time)
+     * @dev These are the prices that will be used for renewals
+     * @param tokenId The token to query
+     * @return lockedMonthlyPrice The locked monthly subscription price
+     * @return lockedYearlyPrice The locked yearly subscription price
+     */
+    function getTokenLockedPrices(uint256 tokenId)
+        external
+        view
+        returns (uint256 lockedMonthlyPrice, uint256 lockedYearlyPrice)
+    {
+        if (_owners[tokenId] == address(0)) revert TokenNotExists();
+        TokenAttributes storage attrs = _tokenAttributes[tokenId];
+        return (attrs.lockedMonthlyPrice, attrs.lockedYearlyPrice);
     }
 
     /**

@@ -35,7 +35,7 @@ src/
 
 | Contract | Description |
 |----------|-------------|
-| **BiuBiuPremium** | Premium membership subscription NFT (Daily/Monthly/Yearly tiers) with referral system |
+| **BiuBiuPremium** | Premium membership subscription NFT (Monthly/Yearly tiers) with referral system |
 | **BiuBiuVault** | Epoch-based revenue distribution vault for DAO token holders |
 | **BiuBiuShare** | ERC20 DAO token with fixed supply for vault rewards |
 | **WETH** | Wrapped ETH with `depositAndApprove` functionality |
@@ -60,14 +60,14 @@ All contracts use CREATE2 for deterministic deployment addresses across any EVM 
 | Contract | Address | Note |
 |----------|---------|------|
 | WETH | `0x8c818450FD5C285923e76Be0dd0160Ad83dF396C` | |
-| BiuBiuPremium | `0xaAf581eC0CE6680903871E84FCE1af46bb7bC77e` | |
+| BiuBiuPremium | `0xa25033300e8e886E3e503eaa0dfB05D8b90D6F7E` | |
 | BiuBiuVault | `0x6233BE8a53D878B8cCbDA35692Ee901C3201032C` | |
 | BiuBiuShare | `0x58CF0902133F6965f3E28FB4BD54AdfcA9295806` | Deployed by BiuBiuVault |
 | NFTMetadata | `0x4380Ccb96103bDcA6839be9710c997C59f9b8954` | |
-| TokenFactory | `0x05a0056b59B63CDB9bfb52Aa04464808124877eF` | |
-| NFTFactory | `0x4B6EC4225af83ea83921d3E73B7a956676571213` | |
-| TokenDistribution | `0x00D0dB4F0Bd0A04C78F442Fa70B16061A3f49e0D` | |
-| TokenSweep | `0x8C008c0BC4a23EA2d39B887b414628B84E7Cba5c` | |
+| TokenFactory | `0x0a1f50ccc66d0688e1353F1581F31d03F8C7A1e3` | |
+| NFTFactory | `0xDe9245EC38A3Ae0028a8E4CfBA5825eDee1270F0` | |
+| TokenDistribution | `0x6CB341DC6cb7da4Ae9b2B2aE15Ad97a1c74c3c07` | |
+| TokenSweep | `0x0385D461BC94b60C791951242Df148033E641b27` | |
 
 ## Interfaces
 
