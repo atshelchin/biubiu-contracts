@@ -42,10 +42,10 @@ contract BiuBiuPremium is IBiuBiuPremium {
     uint256 public NON_MEMBER_FEE = 0.01 ether;
 
     // Price multipliers (constant)
-    // Monthly = NON_MEMBER_FEE * 5
-    // Yearly = NON_MEMBER_FEE * 15 (Monthly * 3)
-    uint256 public constant MONTHLY_MULTIPLIER = 5;
-    uint256 public constant YEARLY_MULTIPLIER = 15;
+    // Monthly = NON_MEMBER_FEE * 12
+    // Yearly = NON_MEMBER_FEE * 60 (Monthly * 5)
+    uint256 public constant MONTHLY_MULTIPLIER = 12;
+    uint256 public constant YEARLY_MULTIPLIER = 60;
 
     // Tier duration (constant)
     uint256 public constant MONTHLY_DURATION = 30 days;
@@ -70,7 +70,7 @@ contract BiuBiuPremium is IBiuBiuPremium {
 
     /**
      * @notice Get current monthly subscription price
-     * @return Monthly price (NON_MEMBER_FEE * 5)
+     * @return Monthly price (NON_MEMBER_FEE * 12)
      */
     function MONTHLY_PRICE() public view returns (uint256) {
         return NON_MEMBER_FEE * MONTHLY_MULTIPLIER;
@@ -78,7 +78,7 @@ contract BiuBiuPremium is IBiuBiuPremium {
 
     /**
      * @notice Get current yearly subscription price
-     * @return Yearly price (NON_MEMBER_FEE * 10)
+     * @return Yearly price (NON_MEMBER_FEE * 60, Monthly * 5)
      */
     function YEARLY_PRICE() public view returns (uint256) {
         return NON_MEMBER_FEE * YEARLY_MULTIPLIER;

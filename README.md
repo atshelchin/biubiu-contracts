@@ -60,7 +60,7 @@ All contracts use CREATE2 for deterministic deployment addresses across any EVM 
 | Contract | Address | Note |
 |----------|---------|------|
 | WETH | `0x8c818450FD5C285923e76Be0dd0160Ad83dF396C` | |
-| BiuBiuPremium | `0xa25033300e8e886E3e503eaa0dfB05D8b90D6F7E` | |
+| BiuBiuPremium | `0x469fd92aAd37648f31d3EDc1955C840a75306F78` | |
 | BiuBiuVault | `0x6233BE8a53D878B8cCbDA35692Ee901C3201032C` | |
 | BiuBiuShare | `0x58CF0902133F6965f3E28FB4BD54AdfcA9295806` | Deployed by BiuBiuVault |
 | NFTMetadata | `0x4380Ccb96103bDcA6839be9710c997C59f9b8954` | |

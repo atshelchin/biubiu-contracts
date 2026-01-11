@@ -28,8 +28,8 @@ contract BiuBiuPremiumTest is Test {
 
     // Test constants and defaults
     function testConstants() public view {
-        assertEq(premium.MONTHLY_PRICE(), 0.05 ether); // NON_MEMBER_FEE * 5
-        assertEq(premium.YEARLY_PRICE(), 0.15 ether); // NON_MEMBER_FEE * 15 (Monthly * 3)
+        assertEq(premium.MONTHLY_PRICE(), 0.12 ether); // NON_MEMBER_FEE * 12
+        assertEq(premium.YEARLY_PRICE(), 0.6 ether); // NON_MEMBER_FEE * 60 (Monthly * 5)
         assertEq(premium.MONTHLY_DURATION(), 30 days);
         assertEq(premium.YEARLY_DURATION(), 365 days);
         assertEq(premium.VAULT(), vault);
@@ -461,10 +461,10 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin increases prices via NON_MEMBER_FEE
         vm.prank(premium.admin());
-        premium.setNonMemberFee(0.2 ether); // Monthly = 1 ether, Yearly = 2 ether
+        premium.setNonMemberFee(0.1 ether); // Monthly = 1.2 ether, Yearly = 6 ether
 
         // Verify prices increased
-        assertEq(premium.MONTHLY_PRICE(), 1 ether);
+        assertEq(premium.MONTHLY_PRICE(), 1.2 ether);
 
         // User renews at OLD locked price, not new price
         vm.prank(user1);
@@ -487,15 +487,15 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin increases prices via NON_MEMBER_FEE
         vm.prank(premium.admin());
-        premium.setNonMemberFee(0.2 ether); // Monthly = 1 ether, Yearly = 2 ether
+        premium.setNonMemberFee(0.1 ether); // Monthly = 1.2 ether, Yearly = 6 ether
 
         // New user must pay NEW price
         vm.prank(user2);
-        premium.subscribe{value: 1 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribe{value: 1.2 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         // Check new user's locked price is the NEW price
         (uint256 lockedMonthly,) = premium.getTokenLockedPrices(2);
-        assertEq(lockedMonthly, 1 ether);
+        assertEq(lockedMonthly, 1.2 ether);
     }
 
     // Test getTokenAttributes - renewal count increments
@@ -808,10 +808,10 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(premium.admin());
         premium.setNonMemberFee(newFee);
 
-        // Monthly = newFee * 5 = 0.5 ether
-        // Yearly = newFee * 15 = 1.5 ether (Monthly * 3)
-        assertEq(premium.MONTHLY_PRICE(), 0.5 ether);
-        assertEq(premium.YEARLY_PRICE(), 1.5 ether);
+        // Monthly = newFee * 12 = 1.2 ether
+        // Yearly = newFee * 60 = 6 ether (Monthly * 5)
+        assertEq(premium.MONTHLY_PRICE(), 1.2 ether);
+        assertEq(premium.YEARLY_PRICE(), 6 ether);
     }
 
     // Test setNonMemberFee by admin
@@ -857,7 +857,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin raises prices via NON_MEMBER_FEE
         vm.prank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 5 ether, Yearly = 10 ether
+        premium.setNonMemberFee(1 ether); // Monthly = 12 ether, Yearly = 60 ether
 
         // Transfer NFT to user2
         vm.prank(user1);
@@ -884,7 +884,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin raises prices via NON_MEMBER_FEE
         vm.prank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 5 ether, Yearly = 10 ether
+        premium.setNonMemberFee(1 ether); // Monthly = 12 ether, Yearly = 60 ether
 
         // Anyone can gift renewal using locked price
         vm.prank(user2);
@@ -912,7 +912,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin raises prices significantly via NON_MEMBER_FEE
         vm.prank(premium.admin());
-        premium.setNonMemberFee(10 ether); // Monthly = 50 ether, Yearly = 100 ether
+        premium.setNonMemberFee(10 ether); // Monthly = 120 ether, Yearly = 600 ether
 
         // Renew with each tier at locked prices
         vm.startPrank(user1);
@@ -1282,12 +1282,12 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin increases prices via NON_MEMBER_FEE
         vm.prank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 5 ether, Yearly = 15 ether
+        premium.setNonMemberFee(1 ether); // Monthly = 12 ether, Yearly = 60 ether
 
-        // User tries to pay NEW price (5 ether) but locked price is monthlyPrice
+        // User tries to pay NEW price (12 ether) but locked price is monthlyPrice
         vm.prank(user1);
         vm.expectRevert(BiuBiuPremium.IncorrectPaymentAmount.selector);
-        premium.subscribe{value: 5 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribe{value: 12 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
     // Test: Token attributes for tokenId 0 (should revert)
@@ -1442,9 +1442,9 @@ contract BiuBiuPremiumTest is Test {
 
         // Admin changes NON_MEMBER_FEE multiple times
         vm.startPrank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 5 ether
-        premium.setNonMemberFee(0.001 ether); // Monthly = 0.005 ether
-        premium.setNonMemberFee(10 ether); // Monthly = 50 ether
+        premium.setNonMemberFee(1 ether); // Monthly = 12 ether
+        premium.setNonMemberFee(0.001 ether); // Monthly = 0.012 ether
+        premium.setNonMemberFee(10 ether); // Monthly = 120 ether
         vm.stopPrank();
 
         // Token 1's locked price is still the original
@@ -1650,34 +1650,33 @@ contract BiuBiuPremiumTest is Test {
         uint256 referrerBalanceBefore = referrer.balance;
 
         // Test with amount to ensure bit shift works correctly
-        // monthlyPrice = 0.05 ether = 50000000000000000 wei
-        // 50000000000000000 >> 1 = 25000000000000000 (correct 50%)
+        // monthlyPrice = 0.12 ether = 120000000000000000 wei
+        // 120000000000000000 >> 1 = 60000000000000000 (correct 50%)
         vm.prank(user1);
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer);
 
         uint256 expectedReferral = monthlyPrice >> 1;
         assertEq(referrer.balance, referrerBalanceBefore + expectedReferral);
-        assertEq(expectedReferral, 0.025 ether);
+        assertEq(expectedReferral, 0.06 ether);
     }
 
-    // Test: Referral with 1 wei (minimum) - referral amount would be 0
+    // Test: Referral with small wei amount
     function testReferralWithMinimumAmount() public {
-        // Set NON_MEMBER_FEE to minimum that results in 1 wei monthly price
-        // Since Monthly = NON_MEMBER_FEE * 5, we need NON_MEMBER_FEE = 1 to get Monthly = 5 wei
-        // But we'll just use a very small fee
+        // Set NON_MEMBER_FEE to minimum
+        // Since Monthly = NON_MEMBER_FEE * 12, NON_MEMBER_FEE = 1 gives Monthly = 12 wei
         vm.prank(premium.admin());
-        premium.setNonMemberFee(1); // Monthly = 5 wei, Yearly = 15 wei
+        premium.setNonMemberFee(1); // Monthly = 12 wei, Yearly = 60 wei
 
         uint256 referrerBalanceBefore = referrer.balance;
         uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(user1);
-        premium.subscribe{value: 5}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer);
+        premium.subscribe{value: 12}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer);
 
-        // 5 >> 1 = 2, so referrer gets 2 wei
-        assertEq(referrer.balance, referrerBalanceBefore + 2);
-        // Vault gets remaining 3 wei
-        assertEq(vault.balance, vaultBalanceBefore + 3);
+        // 12 >> 1 = 6, so referrer gets 6 wei
+        assertEq(referrer.balance, referrerBalanceBefore + 6);
+        // Vault gets remaining 6 wei
+        assertEq(vault.balance, vaultBalanceBefore + 6);
     }
 }
 
