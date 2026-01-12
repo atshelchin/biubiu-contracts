@@ -105,7 +105,9 @@ contract NFTFactory is INFTFactory {
 
         bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, externalURL, onlyOwnerCanMint));
 
-        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, externalURL, msg.sender, METADATA_CONTRACT, onlyOwnerCanMint);
+        SocialNFT nft = new SocialNFT{salt: salt}(
+            name, symbol, description, externalURL, msg.sender, METADATA_CONTRACT, onlyOwnerCanMint
+        );
 
         address nftAddress = address(nft);
         allNFTs.push(nftAddress);
@@ -636,22 +638,5 @@ contract SocialNFT {
             glow: uint8((seed >> 24) % 10),
             luckyNumber: (seed >> 32) % 10000
         });
-    }
-
-    function _toString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) return "0";
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits--;
-            buffer[digits] = bytes1(uint8(48 + (value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
     }
 }

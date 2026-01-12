@@ -2214,7 +2214,12 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
     // Test: Premium member can call createERC721Free via callTool
     function testCallToolNFTFactoryCreateERC721Free() public {
         bytes memory callData = abi.encodeWithSelector(
-            NFTFactory.createERC721Free.selector, "TestNFT", "TNFT", "A test NFT collection", "https://example.com"
+            NFTFactory.createERC721Free.selector,
+            "TestNFT",
+            "TNFT",
+            "A test NFT collection",
+            "https://example.com",
+            true
         );
 
         vm.prank(user1);
@@ -2240,12 +2245,16 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
 
         bytes memory result1 = premium.callTool(
             address(nftFactory),
-            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT1", "N1", "First NFT", "https://nft1.com")
+            abi.encodeWithSelector(
+                NFTFactory.createERC721Free.selector, "NFT1", "N1", "First NFT", "https://nft1.com", true
+            )
         );
 
         bytes memory result2 = premium.callTool(
             address(nftFactory),
-            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT2", "N2", "Second NFT", "https://nft2.com")
+            abi.encodeWithSelector(
+                NFTFactory.createERC721Free.selector, "NFT2", "N2", "Second NFT", "https://nft2.com", true
+            )
         );
 
         vm.stopPrank();
@@ -2261,7 +2270,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
     // Test: Non-member cannot call createERC721Free via callTool
     function testCallToolNFTFactoryNotPremiumMember() public {
         bytes memory callData = abi.encodeWithSelector(
-            NFTFactory.createERC721Free.selector, "TestNFT", "TNFT", "Description", "https://example.com"
+            NFTFactory.createERC721Free.selector, "TestNFT", "TNFT", "Description", "https://example.com", true
         );
 
         vm.prank(nonMember);
@@ -2465,7 +2474,9 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
         vm.prank(user1);
         premium.callTool(
             address(nftFactory),
-            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT", "N", "Desc", "https://example.com")
+            abi.encodeWithSelector(
+                NFTFactory.createERC721Free.selector, "NFT", "N", "Desc", "https://example.com", true
+            )
         );
         assertEq(nftFactory.getUserNFTs(address(premium)).length, 1);
     }
@@ -2483,7 +2494,9 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
         );
         premium.callTool(
             address(nftFactory),
-            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT1", "N1", "Desc", "https://example.com")
+            abi.encodeWithSelector(
+                NFTFactory.createERC721Free.selector, "NFT1", "N1", "Desc", "https://example.com", true
+            )
         );
         vm.stopPrank();
 
