@@ -54,18 +54,20 @@ contract NFTFactory is INFTFactory {
      * @param description Collection description
      * @param externalURL Project website URL
      * @param referrer Referrer address for fee sharing
+     * @param onlyOwnerCanMint If true, only owner can mint; if false, anyone can mint (with payment)
      */
     function createERC721(
         string memory name,
         string memory symbol,
         string memory description,
         string memory externalURL,
-        address referrer
+        address referrer,
+        bool onlyOwnerCanMint
     ) external payable nonReentrant returns (address) {
         // Collect fee (non-members pay directly)
         _collectFee(referrer);
 
-        return _createERC721(name, symbol, description, externalURL, USAGE_PAID);
+        return _createERC721(name, symbol, description, externalURL, onlyOwnerCanMint, USAGE_PAID);
     }
 
     /**
@@ -74,15 +76,17 @@ contract NFTFactory is INFTFactory {
      * @param symbol Collection symbol
      * @param description Collection description
      * @param externalURL Project website URL
+     * @param onlyOwnerCanMint If true, only owner can mint; if false, anyone can mint (with payment)
      */
     function createERC721Free(
         string memory name,
         string memory symbol,
         string memory description,
-        string memory externalURL
+        string memory externalURL,
+        bool onlyOwnerCanMint
     ) external nonReentrant returns (address) {
         totalFreeUsage++;
-        return _createERC721(name, symbol, description, externalURL, USAGE_FREE);
+        return _createERC721(name, symbol, description, externalURL, onlyOwnerCanMint, USAGE_FREE);
     }
 
     /**
@@ -93,14 +97,15 @@ contract NFTFactory is INFTFactory {
         string memory symbol,
         string memory description,
         string memory externalURL,
+        bool onlyOwnerCanMint,
         uint8 usageType
     ) internal returns (address) {
         if (bytes(name).length == 0) revert NameEmpty();
         if (bytes(symbol).length == 0) revert SymbolEmpty();
 
-        bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, externalURL));
+        bytes32 salt = keccak256(abi.encodePacked(msg.sender, name, symbol, description, externalURL, onlyOwnerCanMint));
 
-        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, externalURL, msg.sender, METADATA_CONTRACT);
+        SocialNFT nft = new SocialNFT{salt: salt}(name, symbol, description, externalURL, msg.sender, METADATA_CONTRACT, onlyOwnerCanMint);
 
         address nftAddress = address(nft);
         allNFTs.push(nftAddress);
@@ -331,7 +336,8 @@ contract SocialNFT {
         string memory _collectionDescription,
         string memory _externalURL,
         address _owner,
-        address _metadataContract
+        address _metadataContract,
+        bool _onlyOwnerCanMint
     ) {
         name = _name;
         symbol = _symbol;
@@ -339,6 +345,7 @@ contract SocialNFT {
         externalURL = _externalURL;
         owner = _owner;
         METADATA_CONTRACT = _metadataContract;
+        onlyOwnerCanMint = _onlyOwnerCanMint;
     }
 
     // ============ Mint Functions ============
@@ -382,14 +389,6 @@ contract SocialNFT {
         emit Minted(tokenId, to, tokenTraits[tokenId].rarity, tokenTraits[tokenId].luckyNumber);
 
         return tokenId;
-    }
-
-    /**
-     * @notice Set mint permission mode
-     * @param _onlyOwnerCanMint true = only owner can mint, false = anyone can mint (default)
-     */
-    function setOnlyOwnerCanMint(bool _onlyOwnerCanMint) external onlyOwner {
-        onlyOwnerCanMint = _onlyOwnerCanMint;
     }
 
     // ============ Drift (Transfer Message) System ============

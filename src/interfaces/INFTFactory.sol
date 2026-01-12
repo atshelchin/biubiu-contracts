@@ -42,6 +42,7 @@ interface INFTFactory {
      * @param description Collection description
      * @param externalURL Project website URL
      * @param referrer Referrer address for fee sharing
+     * @param onlyOwnerCanMint If true, only owner can mint; if false, anyone can mint (with payment)
      * @return NFT contract address
      */
     function createERC721(
@@ -49,7 +50,8 @@ interface INFTFactory {
         string memory symbol,
         string memory description,
         string memory externalURL,
-        address referrer
+        address referrer,
+        bool onlyOwnerCanMint
     ) external payable returns (address);
 
     /**
@@ -58,13 +60,15 @@ interface INFTFactory {
      * @param symbol Collection symbol
      * @param description Collection description
      * @param externalURL Project website URL
+     * @param onlyOwnerCanMint If true, only owner can mint; if false, anyone can mint (with payment)
      * @return NFT contract address
      */
     function createERC721Free(
         string memory name,
         string memory symbol,
         string memory description,
-        string memory externalURL
+        string memory externalURL,
+        bool onlyOwnerCanMint
     ) external returns (address);
 
     // ============ Query Functions ============
