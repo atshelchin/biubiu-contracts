@@ -254,7 +254,7 @@ contract KnockCardMetadata {
     {
         return string(
             abi.encodePacked(
-                _dataRow(225, "ETH Earned", _formatEth(ethReceived), c, true),
+                _dataRow(225, "Earned", _formatNative(ethReceived), c, true),
                 _dataRow(261, "Sent", _ts(sent), c, true),
                 _dataRow(297, "Accepted", _ts(accepted), c, true),
                 _dataRow(333, "Rejected", _ts(rejected), c, true)
@@ -589,25 +589,25 @@ contract KnockCardMetadata {
         return string(b);
     }
 
-    /// @dev Format wei to ETH with 2 decimal places (e.g., 1.23 ETH)
-    function _formatEth(uint256 wei_) internal pure returns (string memory) {
-        uint256 eth = wei_ / 1e18;
+    /// @dev Format wei to native token with 2 decimal places (e.g., 1.23)
+    function _formatNative(uint256 wei_) internal pure returns (string memory) {
+        uint256 whole = wei_ / 1e18;
         uint256 decimals = (wei_ % 1e18) / 1e16; // 2 decimal places
 
-        if (eth == 0 && decimals == 0) return "0 ETH";
+        if (whole == 0 && decimals == 0) return "0";
 
-        string memory ethStr = _ts(eth);
+        string memory wholeStr = _ts(whole);
         string memory decStr;
 
         if (decimals == 0) {
-            return string(abi.encodePacked(ethStr, " ETH"));
+            return wholeStr;
         } else if (decimals < 10) {
             decStr = string(abi.encodePacked("0", _ts(decimals)));
         } else {
             decStr = _ts(decimals);
         }
 
-        return string(abi.encodePacked(ethStr, ".", decStr, " ETH"));
+        return string(abi.encodePacked(wholeStr, ".", decStr));
     }
 
     bytes internal constant TB = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
