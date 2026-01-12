@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IKnockProtocol} from "./interfaces/IKnockProtocol.sol";
 import {IKnockCard} from "./interfaces/IKnockCard.sol";
+import {KnockCard} from "./KnockCard.sol";
 
 /// @title KnockProtocol - On-chain Attention Market
 /// @notice Allows users to send paid messages (knocks) to any address
@@ -25,9 +26,9 @@ contract KnockProtocol is IKnockProtocol {
 
     // ============ State ============
 
+    address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
+
     IKnockCard public immutable knockCard;
-    address public owner;
-    address public protocolFeeReceiver;
 
     uint256 public nextKnockId = 1;
 
@@ -54,17 +55,8 @@ contract KnockProtocol is IKnockProtocol {
 
     // ============ Constructor ============
 
-    constructor(address _knockCard, address _protocolFeeReceiver) {
-        knockCard = IKnockCard(_knockCard);
-        owner = msg.sender;
-        protocolFeeReceiver = _protocolFeeReceiver;
-    }
-
-    // ============ Modifiers ============
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
-        _;
+    constructor() {
+        knockCard = new KnockCard(address(this));
     }
 
     // ============ Core Functions ============
@@ -101,6 +93,8 @@ contract KnockProtocol is IKnockProtocol {
 
         // Update stats
         knockCard.incrementKnocksSent(msg.sender);
+        knockCard.addEthReceived(receiver, msg.value);  // Track ETH on card (most authoritative metric)
+        knockCard.incrementKnocksReceived(receiver);    // Track knock count on card
         _receiverStats[receiver].totalReceived++;
         _receiverStats[receiver].totalEthReceived += msg.value;
 
@@ -170,10 +164,10 @@ contract KnockProtocol is IKnockProtocol {
 
         _refund(k.sender, senderShare);
         _refund(k.receiver, receiverShare);
-        _refund(protocolFeeReceiver, protocolShare);
+        _refund(VAULT, protocolShare);
 
         // Update stats
-        knockCard.incrementKnocksAccepted(k.sender);
+        knockCard.incrementKnocksAccepted(k.sender);  // Track sender's accepted knocks
         _receiverStats[k.receiver].accepted++;
 
         // Remove from settled list
@@ -197,7 +191,7 @@ contract KnockProtocol is IKnockProtocol {
         uint256 protocolShare = k.bid - receiverShare;
 
         _refund(k.receiver, receiverShare);
-        _refund(protocolFeeReceiver, protocolShare);
+        _refund(VAULT, protocolShare);
 
         // Update stats
         knockCard.incrementKnocksRejected(k.sender);
@@ -278,16 +272,6 @@ contract KnockProtocol is IKnockProtocol {
 
     function isDaySettled(address receiver, uint256 day) external view returns (bool) {
         return _daySettled[receiver][day];
-    }
-
-    // ============ Admin Functions ============
-
-    function setProtocolFeeReceiver(address _receiver) external onlyOwner {
-        protocolFeeReceiver = _receiver;
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        owner = newOwner;
     }
 
     // ============ Internal Functions ============
