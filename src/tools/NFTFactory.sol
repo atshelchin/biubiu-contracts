@@ -307,7 +307,6 @@ contract SocialNFT {
     error TokenNotExist();
     error NotAuthorized();
     error AlreadyLeftMessage();
-    error NoDriftHistory();
     error TransferToNonReceiver();
 
     modifier onlyOwner() {
@@ -369,12 +368,14 @@ contract SocialNFT {
         if (ownerOf[tokenId] != msg.sender) revert NotTokenOwner();
 
         uint256 len = _driftHistory[tokenId].length;
-        if (len == 0) revert NoDriftHistory();
 
-        DriftMessage storage lastDrift = _driftHistory[tokenId][len - 1];
-        if (bytes(lastDrift.message).length > 0) revert AlreadyLeftMessage();
+        // 检查是否已经留过言（最后一条记录的 from 是自己）
+        if (len > 0 && _driftHistory[tokenId][len - 1].from == msg.sender) {
+            revert AlreadyLeftMessage();
+        }
 
-        lastDrift.message = message;
+        // 直接 push 新记录（只有真正留言时才写入）
+        _driftHistory[tokenId].push(DriftMessage({from: msg.sender, message: message, timestamp: block.timestamp}));
 
         emit MessageLeft(tokenId, msg.sender, message);
     }
@@ -454,13 +455,39 @@ contract SocialNFT {
             revert NotAuthorized();
         }
 
+        _transfer(from, to, tokenId);
+    }
+
+    /**
+     * @notice Drift NFT to next owner with a message (atomic operation)
+     * @param to Next owner address
+     * @param tokenId Token ID
+     * @param message Your message to leave on this drift bottle
+     */
+    function driftWithMessage(address to, uint256 tokenId, string calldata message) public {
+        address from = ownerOf[tokenId];
+        if (from != msg.sender) revert NotTokenOwner();
+        if (to == address(0)) revert InvalidRecipient();
+
+        // 检查是否已经留过言
+        uint256 len = _driftHistory[tokenId].length;
+        if (len > 0 && _driftHistory[tokenId][len - 1].from == msg.sender) {
+            revert AlreadyLeftMessage();
+        }
+
+        // 记录留言
+        _driftHistory[tokenId].push(DriftMessage({from: msg.sender, message: message, timestamp: block.timestamp}));
+
+        emit MessageLeft(tokenId, msg.sender, message);
+
+        _transfer(from, to, tokenId);
+    }
+
+    function _transfer(address from, address to, uint256 tokenId) private {
         balanceOf[from]--;
         balanceOf[to]++;
         ownerOf[tokenId] = to;
         delete getApproved[tokenId];
-
-        // Record drift (transfer)
-        _driftHistory[tokenId].push(DriftMessage({from: from, message: "", timestamp: block.timestamp}));
 
         emit Transfer(from, to, tokenId);
         emit Drifted(tokenId, from, to);

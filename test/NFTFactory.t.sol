@@ -191,7 +191,7 @@ contract NFTFactoryTest is Test {
 
     // ========== Drift (Transfer Message) System Tests ==========
 
-    function test_TransferCreatesDrift() public {
+    function test_TransferDoesNotCreateDrift() public {
         vm.prank(alice);
         address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
@@ -201,15 +201,13 @@ contract NFTFactoryTest is Test {
         vm.prank(alice);
         nft.mint(bob, "Token", "Desc");
 
-        // Bob transfers to Charlie
+        // Bob transfers to Charlie (standard transfer, no drift record)
         vm.prank(bob);
         nft.transferFrom(bob, charlie, 0);
 
-        // Check drift history
+        // Check drift history - should be empty since transferFrom no longer creates drift
         SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
-        assertEq(history.length, 1);
-        assertEq(history[0].from, bob);
-        assertEq(bytes(history[0].message).length, 0); // No message yet
+        assertEq(history.length, 0);
     }
 
     function test_LeaveMessage() public {
@@ -221,18 +219,15 @@ contract NFTFactoryTest is Test {
         vm.prank(alice);
         nft.mint(bob, "Token", "Desc");
 
-        // Bob transfers to Charlie
+        // Bob (current owner) leaves a message
         vm.prank(bob);
-        nft.transferFrom(bob, charlie, 0);
-
-        // Charlie leaves a message
-        vm.prank(charlie);
-        nft.leaveMessage(0, "Thanks for the NFT!");
+        nft.leaveMessage(0, "Hello from Bob!");
 
         // Check message was recorded
         SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
         assertEq(history.length, 1);
-        assertEq(history[0].message, "Thanks for the NFT!");
+        assertEq(history[0].from, bob);
+        assertEq(history[0].message, "Hello from Bob!");
     }
 
     function test_LeaveMessageOnlyTokenOwner() public {
@@ -244,28 +239,10 @@ contract NFTFactoryTest is Test {
         vm.prank(alice);
         nft.mint(bob, "Token", "Desc");
 
-        vm.prank(bob);
-        nft.transferFrom(bob, charlie, 0);
-
-        // Bob (not the current owner) tries to leave message
-        vm.prank(bob);
+        // Charlie (not the current owner) tries to leave message
+        vm.prank(charlie);
         vm.expectRevert(SocialNFT.NotTokenOwner.selector);
         nft.leaveMessage(0, "Can I leave a message?");
-    }
-
-    function test_LeaveMessageNoDriftHistoryReverts() public {
-        vm.prank(alice);
-        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
-
-        SocialNFT nft = SocialNFT(nftAddress);
-
-        vm.prank(alice);
-        nft.mint(bob, "Token", "Desc");
-
-        // Bob tries to leave message but no transfer happened yet
-        vm.prank(bob);
-        vm.expectRevert(SocialNFT.NoDriftHistory.selector);
-        nft.leaveMessage(0, "Hello");
     }
 
     function test_LeaveMessageAlreadyLeftReverts() public {
@@ -277,20 +254,17 @@ contract NFTFactoryTest is Test {
         vm.prank(alice);
         nft.mint(bob, "Token", "Desc");
 
+        // Bob leaves first message
         vm.prank(bob);
-        nft.transferFrom(bob, charlie, 0);
-
-        // Charlie leaves first message
-        vm.prank(charlie);
         nft.leaveMessage(0, "First message");
 
-        // Charlie tries to leave another message
-        vm.prank(charlie);
+        // Bob tries to leave another message
+        vm.prank(bob);
         vm.expectRevert(SocialNFT.AlreadyLeftMessage.selector);
         nft.leaveMessage(0, "Second message");
     }
 
-    function test_MultipleDrifts() public {
+    function test_MultipleDriftsWithMessages() public {
         vm.prank(alice);
         address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
@@ -299,35 +273,195 @@ contract NFTFactoryTest is Test {
         vm.prank(alice);
         nft.mint(bob, "Token", "Desc");
 
-        // First drift: Bob -> Charlie
+        // Bob leaves message and transfers to Charlie using driftWithMessage
         vm.prank(bob);
-        nft.transferFrom(bob, charlie, 0);
+        nft.driftWithMessage(charlie, 0, "Message from Bob");
 
+        // Charlie leaves message and transfers to Alice
         vm.prank(charlie);
-        nft.leaveMessage(0, "Message from Charlie");
+        nft.driftWithMessage(alice, 0, "Message from Charlie");
 
-        // Second drift: Charlie -> Alice
-        vm.prank(charlie);
-        nft.transferFrom(charlie, alice, 0);
-
+        // Alice leaves message and transfers to Bob
         vm.prank(alice);
-        nft.leaveMessage(0, "Message from Alice");
-
-        // Third drift: Alice -> Bob
-        vm.prank(alice);
-        nft.transferFrom(alice, bob, 0);
+        nft.driftWithMessage(bob, 0, "Message from Alice");
 
         // Check drift history
         SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
         assertEq(history.length, 3);
         assertEq(history[0].from, bob);
-        assertEq(history[0].message, "Message from Charlie");
+        assertEq(history[0].message, "Message from Bob");
         assertEq(history[1].from, charlie);
-        assertEq(history[1].message, "Message from Alice");
+        assertEq(history[1].message, "Message from Charlie");
         assertEq(history[2].from, alice);
-        assertEq(bytes(history[2].message).length, 0); // Bob hasn't left a message yet
+        assertEq(history[2].message, "Message from Alice");
 
         assertEq(nft.getDriftCount(0), 3);
+    }
+
+    // ========== driftWithMessage Tests ==========
+
+    function test_DriftWithMessage() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        // Bob drifts to Charlie with message (atomic operation)
+        vm.prank(bob);
+        nft.driftWithMessage(charlie, 0, "Hello Charlie!");
+
+        // Check ownership transferred
+        assertEq(nft.ownerOf(0), charlie);
+        assertEq(nft.balanceOf(bob), 0);
+        assertEq(nft.balanceOf(charlie), 1);
+
+        // Check drift history recorded
+        SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
+        assertEq(history.length, 1);
+        assertEq(history[0].from, bob);
+        assertEq(history[0].message, "Hello Charlie!");
+    }
+
+    function test_DriftWithMessageEmitsEvents() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        vm.expectEmit(true, true, false, true);
+        emit MessageLeft(0, bob, "Hello!");
+
+        vm.expectEmit(true, true, true, false);
+        emit Drifted(0, bob, charlie);
+
+        vm.prank(bob);
+        nft.driftWithMessage(charlie, 0, "Hello!");
+    }
+
+    function test_DriftWithMessageNotOwnerReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        // Charlie (not owner) tries to drift
+        vm.prank(charlie);
+        vm.expectRevert(SocialNFT.NotTokenOwner.selector);
+        nft.driftWithMessage(alice, 0, "Trying to steal!");
+    }
+
+    function test_DriftWithMessageToZeroAddressReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.InvalidRecipient.selector);
+        nft.driftWithMessage(address(0), 0, "To nobody");
+    }
+
+    function test_DriftWithMessageAlreadyLeftReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        // Bob leaves message first
+        vm.prank(bob);
+        nft.leaveMessage(0, "My message");
+
+        // Bob tries to drift with message again
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.AlreadyLeftMessage.selector);
+        nft.driftWithMessage(charlie, 0, "Another message");
+    }
+
+    function test_DriftWithMessageThenLeaveMessageReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        // Bob drifts with message to Charlie
+        vm.prank(bob);
+        nft.driftWithMessage(charlie, 0, "From Bob");
+
+        // Charlie tries to leave another message (should work - different user)
+        vm.prank(charlie);
+        nft.leaveMessage(0, "From Charlie");
+
+        // Charlie tries to leave yet another message (should fail)
+        vm.prank(charlie);
+        vm.expectRevert(SocialNFT.AlreadyLeftMessage.selector);
+        nft.leaveMessage(0, "Another from Charlie");
+    }
+
+    function test_LeaveMessageThenDriftWithMessageReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        // Bob leaves message first
+        vm.prank(bob);
+        nft.leaveMessage(0, "My message");
+
+        // Bob tries to driftWithMessage (should fail - already left message)
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.AlreadyLeftMessage.selector);
+        nft.driftWithMessage(charlie, 0, "Trying again");
+    }
+
+    function test_DriftWithMessageThenTransferThenDriftAgain() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        nft.mint(bob, "Token", "Desc");
+
+        // Bob drifts to Charlie with message
+        vm.prank(bob);
+        nft.driftWithMessage(charlie, 0, "From Bob");
+
+        // Charlie transfers to Alice (standard transfer, no message)
+        vm.prank(charlie);
+        nft.transferFrom(charlie, alice, 0);
+
+        // Alice can still drift with message
+        vm.prank(alice);
+        nft.driftWithMessage(bob, 0, "From Alice");
+
+        // Check history
+        SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(0);
+        assertEq(history.length, 2);
+        assertEq(history[0].from, bob);
+        assertEq(history[0].message, "From Bob");
+        assertEq(history[1].from, alice);
+        assertEq(history[1].message, "From Alice");
     }
 
     // ========== ERC721 Standard Tests ==========
@@ -695,6 +829,27 @@ contract NFTFactoryTest is Test {
         nft.transferFrom(bob, charlie, tokenId);
 
         assertEq(nft.ownerOf(tokenId), charlie);
+        // Standard transfer no longer creates drift record
+        assertEq(nft.getDriftCount(tokenId), 0);
+    }
+
+    function testFuzz_DriftWithMessage(string memory _message) public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("Collection", "COL", "Desc", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        vm.prank(alice);
+        uint256 tokenId = nft.mint(bob, "Token", "Desc");
+
+        vm.prank(bob);
+        nft.driftWithMessage(charlie, tokenId, _message);
+
+        assertEq(nft.ownerOf(tokenId), charlie);
         assertEq(nft.getDriftCount(tokenId), 1);
+
+        SocialNFT.DriftMessage[] memory history = nft.getDriftHistory(tokenId);
+        assertEq(history[0].from, bob);
+        assertEq(history[0].message, _message);
     }
 }
