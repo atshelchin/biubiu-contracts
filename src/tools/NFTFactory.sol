@@ -242,6 +242,12 @@ contract SocialNFT {
     // NFTMetadata contract address (deployed separately, passed via constructor)
     address public immutable METADATA_CONTRACT;
 
+    // Protocol vault address (for fee distribution)
+    address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
+
+    // Mint price (0.01 ETH)
+    uint256 public constant MINT_PRICE = 0.01 ether;
+
     // Collection info
     string public name;
     string public symbol;
@@ -251,6 +257,9 @@ contract SocialNFT {
     uint256 public totalSupply;
     uint256 public nextTokenId;
     address public owner;
+
+    // Mint permission: false = anyone can mint (default), true = only owner can mint
+    bool public onlyOwnerCanMint;
 
     // Rarity constants
     uint8 public constant RARITY_COMMON = 0; // 70%
@@ -308,6 +317,8 @@ contract SocialNFT {
     error NotAuthorized();
     error AlreadyLeftMessage();
     error TransferToNonReceiver();
+    error OnlyOwnerCanMintEnabled();
+    error InsufficientPayment();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -333,13 +344,29 @@ contract SocialNFT {
     // ============ Mint Functions ============
 
     /**
-     * @notice Mint NFT with on-chain generated SVG (only owner)
+     * @notice Mint NFT with on-chain generated SVG
+     * @dev Default: anyone can mint (pays MINT_PRICE). Owner can enable onlyOwnerCanMint mode.
+     * @dev Owner mints for free. Non-owners pay MINT_PRICE (80% to owner, 20% to VAULT).
      * @param to Recipient address
      * @param _name Token name
      * @param _description Token description
      */
-    function mint(address to, string calldata _name, string calldata _description) public onlyOwner returns (uint256) {
+    function mint(address to, string calldata _name, string calldata _description) public payable returns (uint256) {
+        // Check permission
+        if (onlyOwnerCanMint && msg.sender != owner) revert OnlyOwnerCanMintEnabled();
         if (to == address(0)) revert InvalidRecipient();
+
+        // Owner mints for free, others pay MINT_PRICE
+        if (msg.sender != owner) {
+            if (msg.value < MINT_PRICE) revert InsufficientPayment();
+            // 80% to collection owner, 20% to VAULT
+            uint256 ownerAmount = (msg.value * 80) / 100;
+            uint256 vaultAmount = msg.value - ownerAmount;
+            // forge-lint: disable-next-line(unchecked-call)
+            payable(owner).call{value: ownerAmount}("");
+            // forge-lint: disable-next-line(unchecked-call)
+            payable(VAULT).call{value: vaultAmount}("");
+        }
 
         uint256 tokenId = nextTokenId++;
         ownerOf[tokenId] = to;
@@ -355,6 +382,14 @@ contract SocialNFT {
         emit Minted(tokenId, to, tokenTraits[tokenId].rarity, tokenTraits[tokenId].luckyNumber);
 
         return tokenId;
+    }
+
+    /**
+     * @notice Set mint permission mode
+     * @param _onlyOwnerCanMint true = only owner can mint, false = anyone can mint (default)
+     */
+    function setOnlyOwnerCanMint(bool _onlyOwnerCanMint) external onlyOwner {
+        onlyOwnerCanMint = _onlyOwnerCanMint;
     }
 
     // ============ Drift (Transfer Message) System ============

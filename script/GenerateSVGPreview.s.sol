@@ -31,7 +31,7 @@ contract GenerateSVGPreview is Script {
 
             // generateSVG signature includes collectionName and externalURL
             string memory svg = metadata.generateSVG(
-                "Genesis Collection", "https://biubiu.tools", rarity, bg, pattern, glow, luckyNumber
+                unicode"Genesis Collection 💗", "https://biubiu.tools", rarity, bg, pattern, glow, luckyNumber
             );
 
             // Save to file

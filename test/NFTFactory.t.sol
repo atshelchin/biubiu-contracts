@@ -127,16 +127,122 @@ contract NFTFactoryTest is Test {
         assertEq(nft.ownerOf(0), bob);
     }
 
-    function test_MintOnlyOwner() public {
+    function test_MintByNonOwnerWithPayment() public {
         vm.prank(alice);
         address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
 
         SocialNFT nft = SocialNFT(nftAddress);
 
-        // Bob tries to mint - should fail
+        // Bob mints with payment (default: open mint mode)
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        uint256 tokenId = nft.mint{value: 0.01 ether}(bob, "Token", "Desc");
+
+        assertEq(tokenId, 0);
+        assertEq(nft.ownerOf(0), bob);
+        assertEq(nft.balanceOf(bob), 1);
+    }
+
+    function test_MintByNonOwnerInsufficientPaymentReverts() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Bob tries to mint without enough payment
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.InsufficientPayment.selector);
+        nft.mint{value: 0.005 ether}(bob, "Token", "Desc");
+    }
+
+    function test_MintOnlyOwnerModeEnabled() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Alice enables onlyOwnerCanMint mode
+        vm.prank(alice);
+        nft.setOnlyOwnerCanMint(true);
+
+        // Bob tries to mint - should fail even with payment
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(SocialNFT.OnlyOwnerCanMintEnabled.selector);
+        nft.mint{value: 0.01 ether}(bob, "Token", "Desc");
+
+        // Alice (owner) can still mint for free
+        vm.prank(alice);
+        uint256 tokenId = nft.mint(alice, "Token", "Desc");
+        assertEq(tokenId, 0);
+    }
+
+    function test_MintFeeDistribution() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+        address vault = nft.VAULT();
+
+        // Record initial balances
+        uint256 aliceBalanceBefore = alice.balance;
+        uint256 vaultBalanceBefore = vault.balance;
+
+        // Bob mints with payment
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        nft.mint{value: 0.01 ether}(bob, "Token", "Desc");
+
+        // Check fee distribution: 80% to owner (alice), 20% to VAULT
+        assertEq(alice.balance - aliceBalanceBefore, 0.008 ether); // 80%
+        assertEq(vault.balance - vaultBalanceBefore, 0.002 ether); // 20%
+    }
+
+    function test_OwnerMintsFree() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Owner mints without payment
+        vm.prank(alice);
+        uint256 tokenId = nft.mint(bob, "Token", "Desc");
+
+        assertEq(tokenId, 0);
+        assertEq(nft.ownerOf(0), bob);
+    }
+
+    function test_SetOnlyOwnerCanMint() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Default is false
+        assertFalse(nft.onlyOwnerCanMint());
+
+        // Owner can set
+        vm.prank(alice);
+        nft.setOnlyOwnerCanMint(true);
+        assertTrue(nft.onlyOwnerCanMint());
+
+        // Owner can toggle back
+        vm.prank(alice);
+        nft.setOnlyOwnerCanMint(false);
+        assertFalse(nft.onlyOwnerCanMint());
+    }
+
+    function test_SetOnlyOwnerCanMintOnlyOwner() public {
+        vm.prank(alice);
+        address nftAddress = factory.createERC721Free("My Collection", "MC", "Description", "https://example.com");
+
+        SocialNFT nft = SocialNFT(nftAddress);
+
+        // Bob (non-owner) tries to set - should fail
         vm.prank(bob);
         vm.expectRevert(SocialNFT.NotOwner.selector);
-        nft.mint(bob, "Token", "Desc");
+        nft.setOnlyOwnerCanMint(true);
     }
 
     function test_MintToZeroAddressReverts() public {
