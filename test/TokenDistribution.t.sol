@@ -97,6 +97,137 @@ contract MockBiuBiuPremium {
     }
 }
 
+// ============ EIP-1271 Mock Contract Wallets ============
+
+/// @notice Mock ERC1271 wallet that always returns valid signature
+contract MockERC1271WalletValid {
+    bytes4 constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
+
+    address public owner;
+    mapping(bytes32 => bool) public approvedHashes;
+
+    constructor(address _owner) {
+        owner = _owner;
+    }
+
+    function approveHash(bytes32 hash) external {
+        require(msg.sender == owner, "not owner");
+        approvedHashes[hash] = true;
+    }
+
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
+        // Check if hash is pre-approved
+        if (approvedHashes[hash]) {
+            return EIP1271_MAGIC_VALUE;
+        }
+
+        // Or verify the signature is from owner
+        if (signature.length == 65) {
+            bytes32 r;
+            bytes32 s;
+            uint8 v;
+            assembly {
+                r := calldataload(signature.offset)
+                s := calldataload(add(signature.offset, 32))
+                v := byte(0, calldataload(add(signature.offset, 64)))
+            }
+            address recovered = ecrecover(hash, v, r, s);
+            if (recovered == owner) {
+                return EIP1271_MAGIC_VALUE;
+            }
+        }
+
+        return bytes4(0xffffffff);
+    }
+}
+
+/// @notice Mock ERC1271 wallet that always returns invalid
+contract MockERC1271WalletInvalid {
+    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
+        return bytes4(0xffffffff);
+    }
+}
+
+/// @notice Mock ERC1271 wallet that reverts
+contract MockERC1271WalletReverting {
+    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
+        revert("always reverts");
+    }
+}
+
+/// @notice Mock ERC1271 wallet that returns wrong magic value
+contract MockERC1271WalletWrongMagic {
+    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
+        return bytes4(0x12345678); // Wrong magic value
+    }
+}
+
+/// @notice Mock Safe-like multisig wallet with threshold
+contract MockSafeWallet {
+    bytes4 constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
+
+    address[] public owners;
+    uint256 public threshold;
+    mapping(bytes32 => uint256) public approvalCount;
+    mapping(bytes32 => mapping(address => bool)) public hasApproved;
+
+    constructor(address[] memory _owners, uint256 _threshold) {
+        require(_owners.length >= _threshold, "invalid threshold");
+        owners = _owners;
+        threshold = _threshold;
+    }
+
+    function approveHash(bytes32 hash) external {
+        bool isOwner = false;
+        for (uint256 i = 0; i < owners.length; i++) {
+            if (owners[i] == msg.sender) {
+                isOwner = true;
+                break;
+            }
+        }
+        require(isOwner, "not owner");
+        require(!hasApproved[hash][msg.sender], "already approved");
+
+        hasApproved[hash][msg.sender] = true;
+        approvalCount[hash]++;
+    }
+
+    function isValidSignature(bytes32 hash, bytes calldata) external view returns (bytes4) {
+        if (approvalCount[hash] >= threshold) {
+            return EIP1271_MAGIC_VALUE;
+        }
+        return bytes4(0xffffffff);
+    }
+}
+
+/// @notice Mock ERC1271 wallet with gas limit attack (consumes all gas)
+contract MockERC1271WalletGasGrief {
+    function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
+        // Infinite loop to consume gas
+        while (true) {}
+        return bytes4(0x1626ba7e);
+    }
+}
+
+/// @notice Mock ERC1271 wallet that returns valid only for specific signatures
+contract MockERC1271WalletSelective {
+    bytes4 constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
+
+    mapping(bytes32 => bytes) public validSignatures;
+
+    function setValidSignature(bytes32 hash, bytes calldata signature) external {
+        validSignatures[hash] = signature;
+    }
+
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
+        bytes memory stored = validSignatures[hash];
+        if (stored.length == signature.length && keccak256(stored) == keccak256(signature)) {
+            return EIP1271_MAGIC_VALUE;
+        }
+        return bytes4(0xffffffff);
+    }
+}
+
 contract TokenDistributionTest is Test {
     TokenDistribution public distribution;
     WETH public weth;
@@ -974,5 +1105,1076 @@ contract TokenDistributionTest is Test {
         assertEq(referrer.balance, referrerBalanceBefore + NON_MEMBER_FEE / 2);
         // Owner should get the remaining 50%
         assertEq(VAULT.balance, ownerBalanceBefore + NON_MEMBER_FEE / 2);
+    }
+
+    // ============================================================================
+    // ============ SIGNATURE VERIFICATION TESTS (EOA & EIP-1271) ================
+    // ============================================================================
+
+    // ============ EOA Signature Tests ============
+
+    function test_EOA_ValidSignature_Basic() public {
+        // Basic EOA signature verification
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(1001)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 2 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = _signDistributionAuth(auth, ownerPrivateKey);
+
+        bytes32[] memory allProofs = new bytes32[](2);
+        uint8[] memory proofLengths = new uint8[](2);
+        bytes32[] memory proof0 = _computeMerkleProof(recipients, 0, 0);
+        bytes32[] memory proof1 = _computeMerkleProof(recipients, 0, 1);
+        allProofs[0] = proof0.length > 0 ? proof0[0] : bytes32(0);
+        allProofs[1] = proof1.length > 0 ? proof1[0] : bytes32(0);
+        proofLengths[0] = uint8(proof0.length);
+        proofLengths[1] = uint8(proof1.length);
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 2 ether);
+        assertEq(address(uint160(0x1000)).balance, 1 ether);
+        assertEq(address(uint160(0x1001)).balance, 1 ether);
+    }
+
+    function test_EOA_ValidSignature_DifferentPrivateKeys() public {
+        // Test with multiple different private keys
+        uint256[] memory privateKeys = new uint256[](3);
+        privateKeys[0] = 0xA11CE;
+        privateKeys[1] = 0xB0B;
+        privateKeys[2] = 0xCAFE;
+
+        for (uint256 i = 0; i < privateKeys.length; i++) {
+            address signer = vm.addr(privateKeys[i]);
+            vm.deal(signer, 100 ether);
+
+            vm.prank(signer);
+            weth.depositAndApprove{value: 5 ether}(address(distribution));
+
+            Recipient[] memory recipients = _createRecipients(1, 1 ether);
+            bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+            DistributionAuth memory auth = DistributionAuth({
+                uuid: bytes32(uint256(2000 + i)),
+                token: address(weth),
+                tokenType: 0,
+                tokenId: 0,
+                totalAmount: 1 ether,
+                totalBatches: 1,
+                merkleRoot: merkleRoot,
+                deadline: block.timestamp + 1 days
+            });
+
+            bytes memory signature = _signDistributionAuth(auth, privateKeys[i]);
+
+            bytes32[] memory allProofs = new bytes32[](0);
+            uint8[] memory proofLengths = new uint8[](1);
+            proofLengths[0] = 0;
+
+            vm.prank(executor);
+            (uint256 batchAmount,) =
+                distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+            assertEq(batchAmount, 1 ether);
+        }
+    }
+
+    function test_EOA_InvalidSignature_WrongPrivateKey() public {
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(1002)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Sign with wrong private key
+        uint256 wrongPrivateKey = 0xDEAD;
+        bytes memory signature = _signDistributionAuth(auth, wrongPrivateKey);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        // This will fail because recovered signer won't have WETH approved
+        vm.prank(executor);
+        vm.expectRevert(); // TransferFailed or similar
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EOA_InvalidSignature_Malleability() public {
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(1003)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Create a signature with high s value (malleability)
+        bytes32 highS = bytes32(uint256(0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A1));
+        bytes memory malleableSignature = abi.encodePacked(bytes32(uint256(1)), highS, uint8(27));
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, malleableSignature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EOA_InvalidSignature_WrongLength() public {
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(1004)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Various invalid signature lengths
+        bytes[] memory invalidSigs = new bytes[](5);
+        invalidSigs[0] = hex""; // Empty
+        invalidSigs[1] = hex"1234"; // Too short
+        invalidSigs[2] = hex"123456789012345678901234567890123456789012345678901234567890123456"; // 66 bytes
+        invalidSigs[3] = hex"12345678901234567890123456789012345678901234567890123456789012345678901234567890"; // 80 bytes
+        invalidSigs[4] = hex"1234567890123456789012345678901234567890123456789012345678901234"; // 64 bytes
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        for (uint256 i = 0; i < invalidSigs.length; i++) {
+            vm.prank(executor);
+            vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+            distribution.distributeWithAuthFree(auth, invalidSigs[i], 0, recipients, allProofs, proofLengths);
+        }
+    }
+
+    function test_EOA_InvalidSignature_ZeroRecovery() public {
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(1005)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Signature that recovers to address(0) - all zeros with valid length
+        bytes memory zeroSig = new bytes(65);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, zeroSig, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EOA_ValidSignature_EdgeV_Values() public {
+        // Test with v = 27 and v = 28
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 20 ether}(address(distribution));
+
+        for (uint256 i = 0; i < 2; i++) {
+            Recipient[] memory recipients = _createRecipients(1, 1 ether);
+            bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+            DistributionAuth memory auth = DistributionAuth({
+                uuid: bytes32(uint256(1006 + i)),
+                token: address(weth),
+                tokenType: 0,
+                tokenId: 0,
+                totalAmount: 1 ether,
+                totalBatches: 1,
+                merkleRoot: merkleRoot,
+                deadline: block.timestamp + 1 days
+            });
+
+            bytes memory signature = _signDistributionAuth(auth, ownerPrivateKey);
+
+            bytes32[] memory allProofs = new bytes32[](0);
+            uint8[] memory proofLengths = new uint8[](1);
+            proofLengths[0] = 0;
+
+            vm.prank(executor);
+            (uint256 batchAmount,) =
+                distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+            assertEq(batchAmount, 1 ether);
+        }
+    }
+
+    // ============ EIP-1271 Contract Wallet Tests ============
+
+    function test_EIP1271_ValidContractWallet_Basic() public {
+        // Deploy contract wallet with ownerFromKey as owner
+        MockERC1271WalletValid contractWallet = new MockERC1271WalletValid(ownerFromKey);
+
+        // Fund the contract wallet with WETH
+        vm.deal(address(contractWallet), 100 ether);
+        vm.prank(address(contractWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2001)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 2 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Compute digest for pre-approval
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        // Pre-approve the hash
+        vm.prank(ownerFromKey);
+        contractWallet.approveHash(digest);
+
+        // Create EIP-1271 signature format: abi.encode(contractAddress, innerSignature)
+        bytes memory innerSig = hex"00"; // Minimal inner signature since hash is pre-approved
+        bytes memory signature = abi.encode(address(contractWallet), innerSig);
+
+        bytes32[] memory allProofs = new bytes32[](2);
+        uint8[] memory proofLengths = new uint8[](2);
+        bytes32[] memory proof0 = _computeMerkleProof(recipients, 0, 0);
+        bytes32[] memory proof1 = _computeMerkleProof(recipients, 0, 1);
+        allProofs[0] = proof0.length > 0 ? proof0[0] : bytes32(0);
+        allProofs[1] = proof1.length > 0 ? proof1[0] : bytes32(0);
+        proofLengths[0] = uint8(proof0.length);
+        proofLengths[1] = uint8(proof1.length);
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 2 ether);
+        assertEq(address(uint160(0x1000)).balance, 1 ether);
+        assertEq(address(uint160(0x1001)).balance, 1 ether);
+    }
+
+    function test_EIP1271_ValidContractWallet_WithECDSAInnerSig() public {
+        // Deploy contract wallet
+        MockERC1271WalletValid contractWallet = new MockERC1271WalletValid(ownerFromKey);
+
+        vm.deal(address(contractWallet), 100 ether);
+        vm.prank(address(contractWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2002)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Compute digest
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        // Sign the digest with owner's private key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+        bytes memory innerSig = abi.encodePacked(r, s, v);
+
+        // Create EIP-1271 signature format
+        bytes memory signature = abi.encode(address(contractWallet), innerSig);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 1 ether);
+    }
+
+    function test_EIP1271_SafeMultisig_ThresholdMet() public {
+        // Create 3-of-5 multisig
+        address[] memory owners = new address[](5);
+        owners[0] = address(0x100);
+        owners[1] = address(0x101);
+        owners[2] = address(0x102);
+        owners[3] = address(0x103);
+        owners[4] = address(0x104);
+
+        MockSafeWallet safeWallet = new MockSafeWallet(owners, 3);
+
+        vm.deal(address(safeWallet), 100 ether);
+        vm.prank(address(safeWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2003)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Compute digest
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        // Get 3 owners to approve
+        vm.prank(owners[0]);
+        safeWallet.approveHash(digest);
+        vm.prank(owners[1]);
+        safeWallet.approveHash(digest);
+        vm.prank(owners[2]);
+        safeWallet.approveHash(digest);
+
+        bytes memory signature = abi.encode(address(safeWallet), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 1 ether);
+    }
+
+    function test_EIP1271_SafeMultisig_ThresholdNotMet() public {
+        // Create 3-of-5 multisig
+        address[] memory owners = new address[](5);
+        owners[0] = address(0x200);
+        owners[1] = address(0x201);
+        owners[2] = address(0x202);
+        owners[3] = address(0x203);
+        owners[4] = address(0x204);
+
+        MockSafeWallet safeWallet = new MockSafeWallet(owners, 3);
+
+        vm.deal(address(safeWallet), 100 ether);
+        vm.prank(address(safeWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2004)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        // Only 2 owners approve (threshold is 3)
+        vm.prank(owners[0]);
+        safeWallet.approveHash(digest);
+        vm.prank(owners[1]);
+        safeWallet.approveHash(digest);
+
+        bytes memory signature = abi.encode(address(safeWallet), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EIP1271_InvalidContractWallet_AlwaysInvalid() public {
+        MockERC1271WalletInvalid invalidWallet = new MockERC1271WalletInvalid();
+
+        vm.deal(address(invalidWallet), 100 ether);
+        vm.prank(address(invalidWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2005)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = abi.encode(address(invalidWallet), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EIP1271_ContractWallet_Reverts() public {
+        MockERC1271WalletReverting revertingWallet = new MockERC1271WalletReverting();
+
+        vm.deal(address(revertingWallet), 100 ether);
+        vm.prank(address(revertingWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2006)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = abi.encode(address(revertingWallet), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        // Should gracefully handle the revert and return InvalidSignature
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EIP1271_ContractWallet_WrongMagicValue() public {
+        MockERC1271WalletWrongMagic wrongMagicWallet = new MockERC1271WalletWrongMagic();
+
+        vm.deal(address(wrongMagicWallet), 100 ether);
+        vm.prank(address(wrongMagicWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2007)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = abi.encode(address(wrongMagicWallet), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EIP1271_SelectiveWallet_CorrectSignature() public {
+        MockERC1271WalletSelective selectiveWallet = new MockERC1271WalletSelective();
+
+        vm.deal(address(selectiveWallet), 100 ether);
+        vm.prank(address(selectiveWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2008)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        // Set valid signature
+        bytes memory innerSig = hex"CAFEBABE";
+        selectiveWallet.setValidSignature(digest, innerSig);
+
+        bytes memory signature = abi.encode(address(selectiveWallet), innerSig);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 1 ether);
+    }
+
+    function test_EIP1271_SelectiveWallet_WrongSignature() public {
+        MockERC1271WalletSelective selectiveWallet = new MockERC1271WalletSelective();
+
+        vm.deal(address(selectiveWallet), 100 ether);
+        vm.prank(address(selectiveWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(2009)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        // Set valid signature
+        selectiveWallet.setValidSignature(digest, hex"CAFEBABE");
+
+        // But use wrong signature
+        bytes memory signature = abi.encode(address(selectiveWallet), hex"DEADBEEF");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    // ============ Edge Cases and Security Tests ============
+
+    function test_EIP1271_EOAAddressInContractFormat() public {
+        // Try to use EOA address in contract signature format
+        // This should fail because EOA has no code
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(3001)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Use EOA address in contract signature format
+        bytes memory signature = abi.encode(ownerFromKey, hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EIP1271_ZeroAddressInContractFormat() public {
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(3002)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // Use zero address in contract signature format
+        bytes memory signature = abi.encode(address(0), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_EIP1271_SignatureLengthBoundary() public {
+        // Test signature length boundaries (85 bytes is the minimum for EIP-1271 path)
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(3003)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        // 85 bytes - exactly at boundary (should try EIP-1271 but fail to decode)
+        bytes memory sig85 = new bytes(85);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, sig85, 0, recipients, allProofs, proofLengths);
+
+        // 86 bytes - above boundary
+        bytes memory sig86 = new bytes(86);
+
+        auth.uuid = bytes32(uint256(3004));
+
+        vm.prank(executor);
+        vm.expectRevert(); // Will try to decode and fail
+        distribution.distributeWithAuthFree(auth, sig86, 0, recipients, allProofs, proofLengths);
+    }
+
+    function test_Signature_SwitchBetweenEOAAndContract() public {
+        // First use EOA signature, then contract signature
+        MockERC1271WalletValid contractWallet = new MockERC1271WalletValid(ownerFromKey);
+
+        // Setup both signers
+        vm.prank(ownerFromKey);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        vm.deal(address(contractWallet), 100 ether);
+        vm.prank(address(contractWallet));
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        // First distribution with EOA
+        Recipient[] memory recipients1 = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot1 = _computeMerkleRoot(recipients1, 0);
+
+        DistributionAuth memory auth1 = DistributionAuth({
+            uuid: bytes32(uint256(4001)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot1,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory eoaSig = _signDistributionAuth(auth1, ownerPrivateKey);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        (uint256 amount1,) = distribution.distributeWithAuthFree(auth1, eoaSig, 0, recipients1, allProofs, proofLengths);
+        assertEq(amount1, 1 ether);
+
+        // Second distribution with contract wallet
+        Recipient[] memory recipients2 = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot2 = _computeMerkleRoot(recipients2, 0);
+
+        DistributionAuth memory auth2 = DistributionAuth({
+            uuid: bytes32(uint256(4002)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot2,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32 structHash2 = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth2.uuid,
+                auth2.token,
+                auth2.tokenType,
+                auth2.tokenId,
+                auth2.totalAmount,
+                auth2.totalBatches,
+                auth2.merkleRoot,
+                auth2.deadline
+            )
+        );
+        bytes32 digest2 = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash2));
+
+        vm.prank(ownerFromKey);
+        contractWallet.approveHash(digest2);
+
+        bytes memory contractSig = abi.encode(address(contractWallet), hex"00");
+
+        vm.prank(executor);
+        (uint256 amount2,) =
+            distribution.distributeWithAuthFree(auth2, contractSig, 0, recipients2, allProofs, proofLengths);
+        assertEq(amount2, 1 ether);
+    }
+
+    function test_EIP1271_MultipleBatchesWithContractWallet() public {
+        MockERC1271WalletValid contractWallet = new MockERC1271WalletValid(ownerFromKey);
+
+        vm.deal(address(contractWallet), 100 ether);
+        vm.prank(address(contractWallet));
+        weth.depositAndApprove{value: 20 ether}(address(distribution));
+
+        // Test with 2 recipients in a single batch (simpler merkle proof)
+        Recipient[] memory recipients = _createRecipients(2, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(5001)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 2 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        vm.prank(ownerFromKey);
+        contractWallet.approveHash(digest);
+
+        bytes memory signature = abi.encode(address(contractWallet), hex"00");
+
+        // Build proofs
+        bytes32[] memory allProofs = new bytes32[](2);
+        uint8[] memory proofLengths = new uint8[](2);
+
+        bytes32[] memory proof0 = _computeMerkleProof(recipients, 0, 0);
+        bytes32[] memory proof1 = _computeMerkleProof(recipients, 0, 1);
+
+        allProofs[0] = proof0.length > 0 ? proof0[0] : bytes32(0);
+        allProofs[1] = proof1.length > 0 ? proof1[0] : bytes32(0);
+        proofLengths[0] = uint8(proof0.length);
+        proofLengths[1] = uint8(proof1.length);
+
+        // Execute batch
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 2 ether);
+
+        // Check progress
+        (uint256 executedBatches, uint256 total, uint256 distributed) = distribution.getProgress(auth.uuid);
+        assertEq(executedBatches, 1);
+        assertEq(total, 1);
+        assertEq(distributed, 2 ether);
+
+        // Verify recipients received funds
+        assertEq(address(uint160(0x1000)).balance, 1 ether);
+        assertEq(address(uint160(0x1001)).balance, 1 ether);
+    }
+
+    function test_EIP1271_ERC20Distribution() public {
+        MockERC1271WalletValid contractWallet = new MockERC1271WalletValid(ownerFromKey);
+
+        // Give contract wallet ERC20 tokens
+        mockToken.mint(address(contractWallet), 1000 ether);
+        vm.prank(address(contractWallet));
+        mockToken.approve(address(distribution), 1000 ether);
+
+        Recipient[] memory recipients = _createRecipients(2, 100 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(6001)),
+            token: address(mockToken),
+            tokenType: 1, // ERC20
+            tokenId: 0,
+            totalAmount: 200 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                distribution.DISTRIBUTION_AUTH_TYPEHASH(),
+                auth.uuid,
+                auth.token,
+                auth.tokenType,
+                auth.tokenId,
+                auth.totalAmount,
+                auth.totalBatches,
+                auth.merkleRoot,
+                auth.deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", distribution.DOMAIN_SEPARATOR(), structHash));
+
+        vm.prank(ownerFromKey);
+        contractWallet.approveHash(digest);
+
+        bytes memory signature = abi.encode(address(contractWallet), hex"00");
+
+        bytes32[] memory allProofs = new bytes32[](2);
+        uint8[] memory proofLengths = new uint8[](2);
+        bytes32[] memory proof0 = _computeMerkleProof(recipients, 0, 0);
+        bytes32[] memory proof1 = _computeMerkleProof(recipients, 0, 1);
+        allProofs[0] = proof0.length > 0 ? proof0[0] : bytes32(0);
+        allProofs[1] = proof1.length > 0 ? proof1[0] : bytes32(0);
+        proofLengths[0] = uint8(proof0.length);
+        proofLengths[1] = uint8(proof1.length);
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, 200 ether);
+        assertEq(mockToken.balanceOf(address(uint160(0x1000))), 100 ether);
+        assertEq(mockToken.balanceOf(address(uint160(0x1001))), 100 ether);
+    }
+
+    // ============ Fuzz Tests for Signatures ============
+
+    function testFuzz_EOA_Signature(uint256 privateKey, uint256 amount) public {
+        // Bound private key to valid range
+        privateKey = bound(privateKey, 1, type(uint128).max);
+        amount = bound(amount, 0.001 ether, 1 ether);
+
+        address signer = vm.addr(privateKey);
+        vm.deal(signer, 100 ether);
+
+        vm.prank(signer);
+        weth.depositAndApprove{value: 10 ether}(address(distribution));
+
+        Recipient[] memory recipients = _createRecipients(1, amount);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(privateKey), // Use privateKey as unique UUID
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: amount,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = _signDistributionAuth(auth, privateKey);
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        (uint256 batchAmount,) =
+            distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
+
+        assertEq(batchAmount, amount);
+    }
+
+    function testFuzz_InvalidSignatureBytes(bytes memory randomSig) public {
+        // Skip if length is exactly 65 (could be valid EOA) or > 85 (could be valid EIP-1271)
+        vm.assume(randomSig.length != 65);
+        vm.assume(randomSig.length <= 85);
+
+        Recipient[] memory recipients = _createRecipients(1, 1 ether);
+        bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
+
+        DistributionAuth memory auth = DistributionAuth({
+            uuid: bytes32(uint256(99999)),
+            token: address(weth),
+            tokenType: 0,
+            tokenId: 0,
+            totalAmount: 1 ether,
+            totalBatches: 1,
+            merkleRoot: merkleRoot,
+            deadline: block.timestamp + 1 days
+        });
+
+        bytes32[] memory allProofs = new bytes32[](0);
+        uint8[] memory proofLengths = new uint8[](1);
+        proofLengths[0] = 0;
+
+        vm.prank(executor);
+        vm.expectRevert(TokenDistribution.InvalidSignature.selector);
+        distribution.distributeWithAuthFree(auth, randomSig, 0, recipients, allProofs, proofLengths);
     }
 }

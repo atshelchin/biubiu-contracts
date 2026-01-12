@@ -16,6 +16,10 @@ interface IERC1155 {
     function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external;
 }
 
+interface IERC1271 {
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4);
+}
+
 /// @title TokenDistribution
 /// @notice Batch distribute ETH, ERC20, ERC721, ERC1155 tokens to multiple recipients
 /// @dev Supports self-execute and delegated execute modes with Merkle tree verification
@@ -30,6 +34,7 @@ contract TokenDistribution is ITokenDistribution {
 
     // Constants
     uint256 public constant MAX_BATCH_SIZE = 100;
+    bytes4 public constant EIP1271_MAGIC_VALUE = 0x1626ba7e;
 
     constructor(address _weth) {
         WETH = IWETH(_weth);
@@ -590,8 +595,6 @@ contract TokenDistribution is ITokenDistribution {
         view
         returns (address)
     {
-        if (signature.length != 65) revert InvalidSignature();
-
         bytes32 structHash = keccak256(
             abi.encode(
                 DISTRIBUTION_AUTH_TYPEHASH,
@@ -608,24 +611,42 @@ contract TokenDistribution is ITokenDistribution {
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
 
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-        assembly {
-            r := calldataload(signature.offset)
-            s := calldataload(add(signature.offset, 32))
-            v := byte(0, calldataload(add(signature.offset, 64)))
+        // Try ECDSA recovery for EOA (65 bytes signature)
+        if (signature.length == 65) {
+            uint8 v;
+            bytes32 r;
+            bytes32 s;
+            assembly {
+                r := calldataload(signature.offset)
+                s := calldataload(add(signature.offset, 32))
+                v := byte(0, calldataload(add(signature.offset, 64)))
+            }
+
+            // Check s value to prevent signature malleability (EIP-2)
+            if (uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
+                address recovered = ecrecover(digest, v, r, s);
+                if (recovered != address(0)) {
+                    return recovered;
+                }
+            }
         }
 
-        // Check s value to prevent signature malleability (EIP-2)
-        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
-            revert InvalidSignature();
+        // Try EIP-1271 for contract wallets
+        // Signature format: abi.encode(signerAddress, actualSignature)
+        if (signature.length > 85) {
+            // 20 bytes address + 32 bytes offset + 32 bytes length + at least 1 byte signature
+            (address contractSigner, bytes memory contractSig) = abi.decode(signature, (address, bytes));
+
+            if (contractSigner != address(0) && contractSigner.code.length > 0) {
+                try IERC1271(contractSigner).isValidSignature(digest, contractSig) returns (bytes4 result) {
+                    if (result == EIP1271_MAGIC_VALUE) {
+                        return contractSigner;
+                    }
+                } catch {}
+            }
         }
 
-        address signer = ecrecover(digest, v, r, s);
-        if (signer == address(0)) revert InvalidSignature();
-
-        return signer;
+        revert InvalidSignature();
     }
 
     function _verifyMerkleProofs(
