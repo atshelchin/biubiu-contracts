@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {ITokenDistribution, Recipient, DistributionAuth, FailedTransfer} from "../interfaces/ITokenDistribution.sol";
-import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 interface IERC20 {
@@ -22,29 +21,21 @@ interface IERC1155 {
 /// @dev Supports self-execute and delegated execute modes with Merkle tree verification
 /// @dev Part of BiuBiu Tools - https://biubiu.tools
 contract TokenDistribution is ITokenDistribution {
+    // Hardcoded constants (no external dependencies)
+    address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
+    uint256 public constant NON_MEMBER_FEE = 0.01 ether;
+
     // Immutables (set via constructor for cross-chain deterministic deployment)
-    IBiuBiuPremium public immutable PREMIUM_CONTRACT;
     IWETH public immutable WETH;
 
     // Constants
     uint256 public constant MAX_BATCH_SIZE = 100;
 
-    constructor(address _premiumContract, address _weth) {
-        PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
+    constructor(address _weth) {
         WETH = IWETH(_weth);
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(DOMAIN_TYPEHASH, keccak256("TokenDistribution"), keccak256("1"), block.chainid, address(this))
         );
-    }
-
-    /// @notice Get the vault address from PREMIUM_CONTRACT
-    function VAULT() public view returns (address) {
-        return PREMIUM_CONTRACT.VAULT();
-    }
-
-    /// @notice Get the non-member fee from PREMIUM_CONTRACT
-    function NON_MEMBER_FEE() public view returns (uint256) {
-        return PREMIUM_CONTRACT.NON_MEMBER_FEE();
     }
 
     // Token types
@@ -55,15 +46,12 @@ contract TokenDistribution is ITokenDistribution {
 
     // Usage types
     uint8 public constant USAGE_FREE = 0;
-    uint8 public constant USAGE_PREMIUM = 1;
-    uint8 public constant USAGE_PAID = 2;
+    uint8 public constant USAGE_PAID = 1;
 
     // Statistics
     uint256 public totalFreeUsage;
-    uint256 public totalPremiumUsage;
     uint256 public totalPaidUsage;
     uint256 public totalFreeAuthUsage;
-    uint256 public totalPremiumAuthUsage;
     uint256 public totalPaidAuthUsage;
 
     // EIP-712 Domain
@@ -124,8 +112,8 @@ contract TokenDistribution is ITokenDistribution {
         uint256 len = recipients.length;
         if (len == 0 || len > MAX_BATCH_SIZE) revert BatchTooLarge();
 
-        // Check premium status and collect fee
-        (uint8 usageType, uint256 availableETH) = _checkAndCollectFeeForDistribute(msg.value, referrer);
+        // Collect fee (non-members pay directly)
+        uint256 availableETH = _collectFeeForDistribute(msg.value, referrer);
 
         // Execute distribution
         (totalDistributed, failed) = _executeDistribute(token, tokenType, tokenId, recipients, availableETH);
@@ -133,7 +121,7 @@ contract TokenDistribution is ITokenDistribution {
         // Refund unused ETH
         _refundETH(msg.sender);
 
-        emit Distributed(msg.sender, token, tokenType, len, totalDistributed, usageType);
+        emit Distributed(msg.sender, token, tokenType, len, totalDistributed, USAGE_PAID);
     }
 
     /// @notice Self-execute distribution (free version)
@@ -185,29 +173,16 @@ contract TokenDistribution is ITokenDistribution {
         }
     }
 
-    /// @dev Check premium status and collect fee for distribute
-    function _checkAndCollectFeeForDistribute(uint256 msgValue, address referrer)
-        internal
-        returns (uint8 usageType, uint256 availableETH)
-    {
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
-
-        availableETH = msgValue;
-
-        if (isPremium) {
-            totalPremiumUsage++;
-            return (USAGE_PREMIUM, availableETH);
-        }
-
+    /// @dev Collect fee for distribute (non-members pay directly)
+    function _collectFeeForDistribute(uint256 msgValue, address referrer) internal returns (uint256 availableETH) {
         // Non-member must pay
-        uint256 fee = NON_MEMBER_FEE();
-        if (availableETH < fee) revert InsufficientPayment();
-        availableETH -= fee;
+        if (msgValue < NON_MEMBER_FEE) revert InsufficientPayment();
+        availableETH = msgValue - NON_MEMBER_FEE;
 
         totalPaidUsage++;
-        _collectFee(fee, referrer);
+        _collectFee(NON_MEMBER_FEE, referrer);
 
-        return (USAGE_PAID, availableETH);
+        return availableETH;
     }
 
     /// @notice Delegated execute distribution (executor sends transaction on behalf of owner) - paid version
@@ -232,12 +207,12 @@ contract TokenDistribution is ITokenDistribution {
         // Validate and verify signature
         address signer = _validateAndVerifyAuth(auth, signature, batchId, recipients.length, proofLengths.length);
 
-        // Check premium status and collect fee
-        uint8 usageType = _checkPremiumAndCollectFeeForAuth(signer, referrer);
+        // Collect fee (non-members pay directly)
+        _collectFeeForAuth(referrer);
 
         // Execute distribution with auth
         (batchAmount, failed) =
-            _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, usageType);
+            _executeDistributeWithAuth(auth, signer, batchId, recipients, proofs, proofLengths, USAGE_PAID);
     }
 
     /// @notice Delegated execute distribution (free version)
@@ -302,23 +277,13 @@ contract TokenDistribution is ITokenDistribution {
         emit DistributedWithAuth(auth.uuid, signer, batchId, recipients.length, batchAmount, usageType);
     }
 
-    /// @dev Check premium status and collect fee for auth distribution
-    function _checkPremiumAndCollectFeeForAuth(address signer, address referrer) internal returns (uint8 usageType) {
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(signer);
-
-        if (isPremium) {
-            totalPremiumAuthUsage++;
-            return USAGE_PREMIUM;
-        }
-
+    /// @dev Collect fee for auth distribution (non-members pay directly)
+    function _collectFeeForAuth(address referrer) internal {
         // Non-member must pay
-        uint256 fee = NON_MEMBER_FEE();
-        if (msg.value < fee) revert InsufficientPayment();
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
 
         totalPaidAuthUsage++;
-        _collectFee(fee, referrer);
-
-        return USAGE_PAID;
+        _collectFee(NON_MEMBER_FEE, referrer);
     }
 
     function _validateAuthInputs(
@@ -385,25 +350,23 @@ contract TokenDistribution is ITokenDistribution {
     // ============ Internal Functions ============
 
     function _collectFee(uint256 fee, address referrer) internal {
-        uint256 ownerAmount = fee;
+        uint256 vaultAmount = fee;
 
         if (referrer != address(0) && referrer != msg.sender) {
             uint256 referralAmount = fee >> 1; // 50%
-            ownerAmount = fee - referralAmount; // Remaining 50% for owner
+            vaultAmount = fee - referralAmount; // Remaining 50% for vault
             (bool success,) = payable(referrer).call{value: referralAmount}("");
             if (success) {
                 emit ReferralPaid(referrer, referralAmount);
             } else {
-                // If referrer transfer fails, owner gets the full fee
-                ownerAmount = fee;
+                // If referrer transfer fails, vault gets the full fee
+                vaultAmount = fee;
             }
         }
 
-        if (ownerAmount > 0) {
-            (bool success,) = payable(VAULT()).call{value: ownerAmount}("");
-            if (success) {
-                emit FeeCollected(msg.sender, ownerAmount);
-            }
+        if (vaultAmount > 0) {
+            // forge-lint: disable-next-line(unchecked-call)
+            payable(VAULT).call{value: vaultAmount}("");
         }
     }
 

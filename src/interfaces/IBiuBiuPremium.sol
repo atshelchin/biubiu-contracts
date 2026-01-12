@@ -88,4 +88,8 @@ interface IBiuBiuPremium {
     function nextTokenId() external view returns (uint256);
     function subscriptionExpiry(uint256 tokenId) external view returns (uint256);
     function activeSubscription(address user) external view returns (uint256);
+
+    // ============ Tool Proxy ============
+
+    function callTool(address target, bytes calldata data) external returns (bytes memory result);
 }

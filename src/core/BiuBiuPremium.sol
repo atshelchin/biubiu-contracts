@@ -19,6 +19,9 @@ contract BiuBiuPremium is IBiuBiuPremium {
     error InvalidAddress();
     error NotApproved();
     error TransferToNonReceiver();
+    error NotPremiumMember();
+    error InvalidTarget();
+    error CallFailed();
 
     // Reentrancy guard
     uint256 private _locked = 1;
@@ -507,6 +510,46 @@ contract BiuBiuPremium is IBiuBiuPremium {
      * @notice Receive ETH sent directly to contract
      */
     receive() external payable {}
+
+    // ============ Tool Proxy ============
+
+    /**
+     * @notice Call a tool contract's free method on behalf of premium members
+     * @dev Uses `call` (not delegatecall) to ensure target cannot modify this contract's state
+     *      Reverts if caller is not a premium member or if target is this contract
+     * @param target The tool contract to call
+     * @param data The calldata (function selector + arguments)
+     * @return result The return data from the tool call
+     */
+    function callTool(address target, bytes calldata data) external nonReentrant returns (bytes memory result) {
+        // Check membership
+        uint256 activeTokenId = activeSubscription[msg.sender];
+        if (activeTokenId == 0 || subscriptionExpiry[activeTokenId] <= block.timestamp) {
+            revert NotPremiumMember();
+        }
+
+        // Prevent calling self (security: cannot modify own state via external call)
+        if (target == address(this)) revert InvalidTarget();
+
+        // Prevent calling zero address
+        if (target == address(0)) revert InvalidTarget();
+
+        // Call tool (using call, not delegatecall; no ETH forwarded)
+        bool success;
+        (success, result) = target.call(data);
+
+        if (!success) {
+            // Bubble up the revert reason
+            if (result.length > 0) {
+                assembly {
+                    revert(add(result, 32), mload(result))
+                }
+            }
+            revert CallFailed();
+        }
+
+        return result;
+    }
 
     // ============ Internal Helpers ============
 

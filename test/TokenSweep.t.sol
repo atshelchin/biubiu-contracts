@@ -47,8 +47,8 @@ contract TokenSweepTest is Test {
         // Deploy premium contract with vault address
         premium = new BiuBiuPremium(vault);
 
-        // Deploy TokenSweep with premium contract address
-        tokenSweep = new TokenSweep(address(premium));
+        // Deploy TokenSweep (no constructor args - vault is hardcoded)
+        tokenSweep = new TokenSweep();
 
         // Create test accounts
         (premiumMember, premiumMemberKey) = makeAddrAndKey("premiumMember");
@@ -75,7 +75,7 @@ contract TokenSweepTest is Test {
         assertEq(tokenSweep.VAULT(), vault);
     }
 
-    // Test premium member can call multicall for free
+    // Test multicallFree can be called without payment
     function testPremiumMemberMulticallFree() public {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
@@ -83,9 +83,9 @@ contract TokenSweepTest is Test {
         uint256 balanceBefore = premiumMember.balance;
 
         vm.prank(premiumMember);
-        tokenSweep.multicall(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        tokenSweep.multicallFree(wallets, recipient, tokens, block.timestamp + 1 hours, "");
 
-        // Premium member should not pay
+        // No payment required for multicallFree
         assertEq(premiumMember.balance, balanceBefore);
     }
 
@@ -106,7 +106,7 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
         uint256 nonMemberBalanceBefore = nonMember.balance;
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
         vm.prank(nonMember);
         tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
@@ -123,7 +123,7 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
         vm.prank(nonMember);
         tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
@@ -133,7 +133,7 @@ contract TokenSweepTest is Test {
         assertEq(vault.balance, vaultBalanceBefore + fee / 2);
     }
 
-    // Test signature authorization - premium member authorizes non-member
+    // Test signature authorization with multicallFree
     function testSignatureAuthorization() public {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
@@ -158,11 +158,11 @@ contract TokenSweepTest is Test {
 
         uint256 nonMemberBalanceBefore = nonMember.balance;
 
-        // Non-member calls with premium member's signature - should be free
+        // Non-member calls multicallFree with signature
         vm.prank(nonMember);
-        tokenSweep.multicall(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), signature);
+        tokenSweep.multicallFree(wallets, recipient, tokens, block.timestamp + 1 hours, signature);
 
-        // Non-member should not pay (using premium member's authorization)
+        // No payment required for multicallFree
         assertEq(nonMember.balance, nonMemberBalanceBefore);
     }
 
@@ -174,7 +174,7 @@ contract TokenSweepTest is Test {
         bytes memory invalidSignature = "invalid";
 
         // Cache fee before prank (prank only affects next external call)
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
         vm.prank(nonMember);
         vm.expectRevert(TokenSweep.InvalidSignature.selector);
@@ -186,7 +186,7 @@ contract TokenSweepTest is Test {
     // Test drainToAddress with signature verification
     function testDrainToAddress() public {
         // Create a TokenSweep instance that will act as a wallet
-        TokenSweep wallet = new TokenSweep(address(premium));
+        TokenSweep wallet = new TokenSweep();
 
         // Mint tokens to the wallet
         token.mint(address(wallet), 1000 ether);
@@ -279,7 +279,7 @@ contract TokenSweepTest is Test {
 
     // Test deadline expired in drainToAddress
     function testDrainToAddressDeadlineExpired() public {
-        TokenSweep wallet = new TokenSweep(address(premium));
+        TokenSweep wallet = new TokenSweep();
         address[] memory tokens = new address[](0);
         uint256 expiredDeadline = block.timestamp - 1;
 
@@ -289,7 +289,7 @@ contract TokenSweepTest is Test {
 
     // Test invalid recipient in drainToAddress
     function testDrainToAddressInvalidRecipient() public {
-        TokenSweep wallet = new TokenSweep(address(premium));
+        TokenSweep wallet = new TokenSweep();
         address[] memory tokens = new address[](0);
         uint256 deadline = block.timestamp + 1 hours;
 
@@ -304,7 +304,7 @@ contract TokenSweepTest is Test {
 
         uint256 vaultBalanceBefore = vault.balance;
         uint256 nonMemberBalanceBefore = nonMember.balance;
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
         // Non-member tries to refer themselves
         vm.prank(nonMember);
@@ -357,28 +357,28 @@ contract TokenSweepTest is Test {
     function testMulticallEventEmissions() public {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
-        // Test premium member event (usageType = 1 = USAGE_PREMIUM)
+        // Test multicallFree event (usageType = 0 = USAGE_FREE)
         vm.prank(premiumMember);
         vm.expectEmit(true, true, false, true);
-        emit MulticallExecuted(premiumMember, recipient, 0, 1);
-        tokenSweep.multicall(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), "");
+        emit MulticallExecuted(premiumMember, recipient, 0, 0);
+        tokenSweep.multicallFree(wallets, recipient, tokens, block.timestamp + 1 hours, "");
 
-        // Test non-member with referrer events (usageType = 2 = USAGE_PAID)
+        // Test paid multicall with referrer events (usageType = 1 = USAGE_PAID)
         vm.prank(nonMember);
         vm.expectEmit(true, true, false, true);
         emit ReferralPaid(referrer, nonMember, fee / 2);
         vm.expectEmit(true, true, false, true);
         emit VaultPaid(vault, nonMember, fee / 2);
         vm.expectEmit(true, true, false, true);
-        emit MulticallExecuted(nonMember, recipient, 0, 2);
+        emit MulticallExecuted(nonMember, recipient, 0, 1);
         tokenSweep.multicall{value: fee}(wallets, recipient, tokens, block.timestamp + 1 hours, referrer, "");
     }
 
     // Test drainToAddress with multiple tokens
     function testDrainToAddressMultipleTokens() public {
-        TokenSweep wallet = new TokenSweep(address(premium));
+        TokenSweep wallet = new TokenSweep();
 
         // Create multiple tokens
         MockERC20 token1 = new MockERC20();
@@ -401,7 +401,7 @@ contract TokenSweepTest is Test {
 
     // Test drainToAddress with address(0) in tokens array
     function testDrainToAddressSkipsZeroAddress() public {
-        TokenSweep wallet = new TokenSweep(address(premium));
+        TokenSweep wallet = new TokenSweep();
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(0); // Should be skipped
@@ -510,7 +510,7 @@ contract TokenSweepTest is Test {
         address[] memory tokens = new address[](0);
 
         uint256 vaultBalanceBefore = vault.balance;
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
         // Non-member pays fee, but contract has 1 ETH already
         vm.prank(nonMember);
@@ -530,7 +530,7 @@ contract TokenSweepTest is Test {
         MockERC20 token3 = new MockERC20();
 
         // Deploy TokenSweep contract template for EIP-7702 delegation
-        TokenSweep templateContract = new TokenSweep(address(premium));
+        TokenSweep templateContract = new TokenSweep();
         bytes memory tokenSweepCode = address(templateContract).code;
 
         // Prepare tokens array and deadline for signature
@@ -582,10 +582,10 @@ contract TokenSweepTest is Test {
         uint256 recipientToken2Before = token2.balanceOf(recipient);
         uint256 recipientToken3Before = token3.balanceOf(recipient);
 
-        // Premium member calls multicall with 100 wallets and 3 tokens
+        // Use multicallFree (anyone can call) with 100 wallets and 3 tokens
         uint256 gasBefore = gasleft();
         vm.prank(premiumMember);
-        tokenSweep.multicall(wallets, recipient, tokens, deadline, address(0), "");
+        tokenSweep.multicallFree(wallets, recipient, tokens, deadline, "");
         uint256 gasUsed = gasBefore - gasleft();
 
         // Log gas usage for 100 wallets + 3 tokens + ETH
@@ -611,7 +611,7 @@ contract TokenSweepTest is Test {
     // Test multicall with 10 EIP-7702 authorized wallets as non-member (should pay fee)
     function testMulticallWith10WalletsNonMember() public {
         // Deploy TokenSweep contract template for EIP-7702 delegation
-        TokenSweep templateContract = new TokenSweep(address(premium));
+        TokenSweep templateContract = new TokenSweep();
         bytes memory tokenSweepCode = address(templateContract).code;
 
         // Prepare tokens array and deadline for signature
@@ -655,7 +655,7 @@ contract TokenSweepTest is Test {
         uint256 recipientTokenBalanceBefore = token.balanceOf(recipient);
         uint256 vaultBalanceBefore = vault.balance;
         uint256 referrerBalanceBefore = referrer.balance;
-        uint256 fee = premium.NON_MEMBER_FEE();
+        uint256 fee = tokenSweep.NON_MEMBER_FEE();
 
         // Non-member calls multicall with wallets and pays fee with referrer
         vm.prank(nonMember);
@@ -680,7 +680,7 @@ contract TokenSweepTest is Test {
         assertEq(token.balanceOf(wallets[9].wallet), 0);
     }
 
-    // Test multicall with 10 wallets - non-member authorized by premium member signature (free)
+    // Test multicallFree with 10 wallets - using signature authorization
     function testMulticallWith10WalletsNonMemberWithPremiumSignature() public {
         // Prepare for signature
         uint256 expiry = block.timestamp + 1 hours;
@@ -691,7 +691,7 @@ contract TokenSweepTest is Test {
         address[] memory tokens = new address[](1);
         tokens[0] = address(token);
 
-        // Premium member signs authorization for non-member
+        // Create a signature for authorization (optional for multicallFree)
         bytes memory sig = _createMulticallSignature(premiumMemberKey, nonMember, recipient);
 
         // Store balances
@@ -699,9 +699,9 @@ contract TokenSweepTest is Test {
         uint256 rTok = token.balanceOf(recipient);
         uint256 vBal = vault.balance;
 
-        // Non-member calls with premium member's signature - free
+        // Non-member calls multicallFree with signature - free
         vm.prank(nonMember);
-        tokenSweep.multicall(wallets, recipient, tokens, expiry, address(0), sig);
+        tokenSweep.multicallFree(wallets, recipient, tokens, expiry, sig);
 
         // Verify sweep and no fee charged
         assertEq(recipient.balance, rBal + 5 ether);
@@ -712,7 +712,7 @@ contract TokenSweepTest is Test {
 
     // Helper: Create EIP-7702 delegated wallets
     function _createEIP7702Wallets(uint256 count, string memory prefix) private returns (Wallet[] memory) {
-        TokenSweep temp = new TokenSweep(address(premium));
+        TokenSweep temp = new TokenSweep();
         bytes memory code = address(temp).code;
 
         address[] memory tokens = new address[](1);
@@ -821,7 +821,7 @@ contract TokenSweepTest is Test {
         // Non-member pays fee with rejecter as referrer
         vm.prank(nonMember);
         // Should succeed even though referrer rejects payment
-        tokenSweep.multicall{value: premium.NON_MEMBER_FEE()}(
+        tokenSweep.multicall{value: tokenSweep.NON_MEMBER_FEE()}(
             wallets, recipient, tokens, block.timestamp + 1 hours, address(rejecter), ""
         );
 
@@ -840,12 +840,12 @@ contract TokenSweepTest is Test {
 
         // Multiple paid calls - all should succeed
         vm.prank(nonMember);
-        tokenSweep.multicall{value: premium.NON_MEMBER_FEE()}(
+        tokenSweep.multicall{value: tokenSweep.NON_MEMBER_FEE()}(
             wallets, recipient, tokens, block.timestamp + 1 hours, address(0), ""
         );
 
         vm.prank(nonMember);
-        tokenSweep.multicall{value: premium.NON_MEMBER_FEE()}(
+        tokenSweep.multicall{value: tokenSweep.NON_MEMBER_FEE()}(
             wallets, recipient, tokens, block.timestamp + 1 hours, address(0), ""
         );
 
@@ -879,19 +879,19 @@ contract TokenSweepTest is Test {
         assertEq(tokenSweep.totalFreeUsage(), 1);
     }
 
-    // Test premium member with signature authorization (covers multicall path)
-    function testPremiumMemberWithSignature() public {
-        bytes memory sig = _createMulticallSignature(premiumMemberKey, nonMember, recipient);
-
+    // Test multicallFree can be called by anyone
+    function testMulticallFreeCanBeCalledByAnyone() public {
         Wallet[] memory wallets = new Wallet[](0);
         address[] memory tokens = new address[](0);
 
-        // nonMember calls with premiumMember's signature - should be free
-        vm.prank(nonMember);
-        tokenSweep.multicall{value: 0}(wallets, recipient, tokens, block.timestamp + 1 hours, address(0), sig);
+        uint256 freeUsageBefore = tokenSweep.totalFreeUsage();
 
-        // Premium usage should increment
-        assertEq(tokenSweep.totalPremiumUsage(), 1);
+        // nonMember calls multicallFree - should be free
+        vm.prank(nonMember);
+        tokenSweep.multicallFree(wallets, recipient, tokens, block.timestamp + 1 hours, "");
+
+        // Free usage should increment
+        assertEq(tokenSweep.totalFreeUsage(), freeUsageBefore + 1);
     }
 }
 

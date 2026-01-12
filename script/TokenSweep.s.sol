@@ -24,7 +24,6 @@ contract TokenSweepScript is Script {
 
         console.log("=== TokenSweep Deployment ===");
         console.log("TokenSweep deployed at:", address(tokenSweep));
-        console.log("Premium contract:", address(tokenSweep.PREMIUM_CONTRACT()));
         console.log("Vault address:", tokenSweep.VAULT());
         console.log("Non-member fee:", tokenSweep.NON_MEMBER_FEE());
         console.log("============================");

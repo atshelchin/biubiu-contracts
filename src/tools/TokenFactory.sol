@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {ITokenFactory, TokenInfo} from "../interfaces/ITokenFactory.sol";
-import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 
 /**
  * @title SimpleToken
@@ -109,31 +108,16 @@ contract SimpleToken {
  * @dev Part of BiuBiu Tools - https://biubiu.tools
  */
 contract TokenFactory is ITokenFactory {
-    // Immutables (set via constructor for cross-chain deterministic deployment)
-    IBiuBiuPremium public immutable PREMIUM_CONTRACT;
-
-    constructor(address _premiumContract) {
-        PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
-    }
-
-    /// @notice Get the vault address from PREMIUM_CONTRACT
-    function VAULT() public view returns (address) {
-        return PREMIUM_CONTRACT.VAULT();
-    }
-
-    /// @notice Get the non-member fee from PREMIUM_CONTRACT
-    function NON_MEMBER_FEE() public view returns (uint256) {
-        return PREMIUM_CONTRACT.NON_MEMBER_FEE();
-    }
+    // Hardcoded constants (no external dependencies)
+    address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
+    uint256 public constant NON_MEMBER_FEE = 0.01 ether;
 
     // Usage types
     uint8 public constant USAGE_FREE = 0;
-    uint8 public constant USAGE_PREMIUM = 1;
-    uint8 public constant USAGE_PAID = 2;
+    uint8 public constant USAGE_PAID = 1;
 
     // Statistics
     uint256 public totalFreeUsage;
-    uint256 public totalPremiumUsage;
     uint256 public totalPaidUsage;
 
     // Errors
@@ -161,11 +145,11 @@ contract TokenFactory is ITokenFactory {
         bool mintable,
         address referrer
     ) external payable returns (address tokenAddress) {
-        // Check premium status and collect fee
-        uint8 usageType = _checkAndCollectFee(referrer);
+        // Collect fee (non-members pay directly)
+        _collectFee(referrer);
 
         // Create token
-        tokenAddress = _createToken(name, symbol, decimals, initialSupply, mintable, usageType);
+        tokenAddress = _createToken(name, symbol, decimals, initialSupply, mintable, USAGE_PAID);
 
         return tokenAddress;
     }
@@ -224,18 +208,11 @@ contract TokenFactory is ITokenFactory {
     }
 
     /**
-     * @dev Check premium status and collect fee if needed
+     * @dev Collect fee from non-member payment
      */
-    function _checkAndCollectFee(address referrer) internal returns (uint8 usageType) {
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(msg.sender);
-
-        if (isPremium) {
-            totalPremiumUsage++;
-            return USAGE_PREMIUM;
-        }
-
-        // Non-member must pay
-        if (msg.value < NON_MEMBER_FEE()) revert InsufficientPayment();
+    function _collectFee(address referrer) internal {
+        // Must pay the fee
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
 
         totalPaidUsage++;
 
@@ -248,16 +225,12 @@ contract TokenFactory is ITokenFactory {
             }
         }
 
-        // Transfer remaining to owner
-        uint256 ownerAmount = address(this).balance;
-        if (ownerAmount > 0) {
-            (bool success,) = payable(VAULT()).call{value: ownerAmount}("");
-            if (success) {
-                emit FeePaid(msg.sender, ownerAmount);
-            }
+        // Transfer remaining to vault
+        uint256 vaultAmount = address(this).balance;
+        if (vaultAmount > 0) {
+            // forge-lint: disable-next-line(unchecked-call)
+            payable(VAULT).call{value: vaultAmount}("");
         }
-
-        return USAGE_PAID;
     }
 
     /**

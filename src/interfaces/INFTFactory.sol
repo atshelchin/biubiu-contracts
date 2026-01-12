@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IBiuBiuPremium} from "./IBiuBiuPremium.sol";
-
 /**
  * @title INFTFactory
  * @notice Interface for NFTFactory ERC721 NFT collection creation
@@ -25,17 +23,14 @@ interface INFTFactory {
     // ============ Constants ============
 
     function USAGE_FREE() external view returns (uint8);
-    function USAGE_PREMIUM() external view returns (uint8);
     function USAGE_PAID() external view returns (uint8);
+    function VAULT() external view returns (address);
+    function NON_MEMBER_FEE() external view returns (uint256);
 
     // ============ State Variables ============
 
-    function PREMIUM_CONTRACT() external view returns (IBiuBiuPremium);
     function METADATA_CONTRACT() external view returns (address);
-    function VAULT() external view returns (address);
-    function NON_MEMBER_FEE() external view returns (uint256);
     function totalFreeUsage() external view returns (uint256);
-    function totalPremiumUsage() external view returns (uint256);
     function totalPaidUsage() external view returns (uint256);
 
     // ============ Main Functions ============

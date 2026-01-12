@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {ITokenSweep, Wallet} from "../interfaces/ITokenSweep.sol";
-import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 
 /**
  * @title TokenSweep
@@ -17,31 +16,16 @@ interface IERC20 {
 }
 
 contract TokenSweep is ITokenSweep {
-    // Immutables (set via constructor for cross-chain deterministic deployment)
-    IBiuBiuPremium public immutable PREMIUM_CONTRACT;
-
-    constructor(address _premiumContract) {
-        PREMIUM_CONTRACT = IBiuBiuPremium(_premiumContract);
-    }
-
-    /// @notice Get the vault address from PREMIUM_CONTRACT
-    function VAULT() public view returns (address) {
-        return PREMIUM_CONTRACT.VAULT();
-    }
-
-    /// @notice Get the non-member fee from PREMIUM_CONTRACT
-    function NON_MEMBER_FEE() public view returns (uint256) {
-        return PREMIUM_CONTRACT.NON_MEMBER_FEE();
-    }
+    // Hardcoded constants (no external dependencies)
+    address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
+    uint256 public constant NON_MEMBER_FEE = 0.01 ether;
 
     // Usage types
     uint8 public constant USAGE_FREE = 0;
-    uint8 public constant USAGE_PREMIUM = 1;
-    uint8 public constant USAGE_PAID = 2;
+    uint8 public constant USAGE_PAID = 1;
 
     // Statistics
     uint256 public totalFreeUsage;
-    uint256 public totalPremiumUsage;
     uint256 public totalPaidUsage;
 
     // Reentrancy guard (1 = unlocked, 2 = locked)
@@ -65,16 +49,18 @@ contract TokenSweep is ITokenSweep {
         address referrer,
         bytes calldata signature
     ) external payable nonReentrant {
-        // Determine who to check for membership (caller or authorized signer)
-        address checker = signature.length > 0 ? _verifyAuthorization(signature, msg.sender, recipient) : msg.sender;
+        // Verify authorization if signature provided
+        if (signature.length > 0) {
+            _verifyAuthorization(signature, msg.sender, recipient);
+        }
 
-        // Check premium status and collect fee
-        uint8 usageType = _checkAndCollectFee(checker, referrer);
+        // Collect fee (non-members pay directly)
+        _collectFee(referrer);
 
         // Execute multicall
         _executeMulticall(wallets, recipient, tokens, deadline);
 
-        emit MulticallExecuted(msg.sender, recipient, wallets.length, usageType);
+        emit MulticallExecuted(msg.sender, recipient, wallets.length, USAGE_PAID);
     }
 
     /**
@@ -119,18 +105,10 @@ contract TokenSweep is ITokenSweep {
     }
 
     /**
-     * @dev Check premium status and collect fee if needed
+     * @dev Collect fee from non-member
      */
-    function _checkAndCollectFee(address checker, address referrer) internal returns (uint8 usageType) {
-        (bool isPremium,,) = PREMIUM_CONTRACT.getSubscriptionInfo(checker);
-
-        if (isPremium) {
-            totalPremiumUsage++;
-            return USAGE_PREMIUM;
-        }
-
-        // Non-member must pay
-        if (msg.value < NON_MEMBER_FEE()) revert InsufficientPayment();
+    function _collectFee(address referrer) internal {
+        if (msg.value < NON_MEMBER_FEE) revert InsufficientPayment();
 
         totalPaidUsage++;
 
@@ -145,18 +123,15 @@ contract TokenSweep is ITokenSweep {
             }
         }
 
-        // Transfer all contract balance to owner (including current payment and any accumulated funds)
+        // Transfer all contract balance to vault
         uint256 contractBalance = address(this).balance;
         if (contractBalance > 0) {
             // forge-lint: disable-next-line(unchecked-call)
-            address vault = VAULT();
-            (bool success,) = payable(vault).call{value: contractBalance}("");
+            (bool success,) = payable(VAULT).call{value: contractBalance}("");
             if (success) {
-                emit VaultPaid(vault, msg.sender, contractBalance);
+                emit VaultPaid(VAULT, msg.sender, contractBalance);
             }
         }
-
-        return USAGE_PAID;
     }
 
     function drainToAddress(address recipient, address[] calldata tokens, uint256 deadline, bytes calldata signature)

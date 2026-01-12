@@ -27,7 +27,7 @@ contract TokenFactoryTest is Test {
 
     function setUp() public {
         premium = new BiuBiuPremium(vault);
-        factory = new TokenFactory(address(premium));
+        factory = new TokenFactory();
     }
 
     // ========== Token Creation Tests ==========

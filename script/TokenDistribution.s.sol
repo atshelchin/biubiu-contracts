@@ -24,7 +24,6 @@ contract TokenDistributionScript is Script {
 
         console.log("=== TokenDistribution Deployment ===");
         console.log("TokenDistribution deployed at:", address(tokenDistribution));
-        console.log("Premium contract:", address(tokenDistribution.PREMIUM_CONTRACT()));
         console.log("WETH address:", address(tokenDistribution.WETH()));
         console.log("Vault address:", tokenDistribution.VAULT());
         console.log("Non-member fee:", tokenDistribution.NON_MEMBER_FEE());

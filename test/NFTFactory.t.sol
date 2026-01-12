@@ -35,7 +35,7 @@ contract NFTFactoryTest is Test {
         premium = new BiuBiuPremium(vault);
         metadata = new NFTMetadata();
         metadataAddr = address(metadata);
-        factory = new NFTFactory(address(premium), metadataAddr);
+        factory = new NFTFactory(metadataAddr);
     }
 
     // ========== Collection Creation Tests ==========

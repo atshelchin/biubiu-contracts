@@ -1398,7 +1398,6 @@ contract BiuBiuPremiumTest is Test {
         assertEq(referrer.balance, referrerBalanceBefore + expectedReferral);
         assertEq(expectedReferral, 0.06 ether);
     }
-
 }
 
 // Contract that rejects ETH to test failed referral payments

@@ -111,12 +111,12 @@ contract TokenDistributionTest is Test {
     address public charlie = address(0x4);
     address public referrer = address(0x5);
     address public executor = address(0x6);
-    address constant VAULT = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
+    address constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
 
     uint256 public ownerPrivateKey = 0x1234;
     address public ownerFromKey;
 
-    uint256 constant NON_MEMBER_FEE = 0.005 ether;
+    uint256 constant NON_MEMBER_FEE = 0.01 ether;
 
     event Distributed(
         address indexed sender,
@@ -146,8 +146,8 @@ contract TokenDistributionTest is Test {
         // Deploy WETH
         weth = new WETH();
 
-        // Deploy TokenDistribution with premium and weth addresses
-        distribution = new TokenDistribution(address(mockPremium), address(weth));
+        // Deploy TokenDistribution with weth address only (no premium dependency)
+        distribution = new TokenDistribution(address(weth));
 
         // Deploy mock tokens
         mockToken = new MockERC20();
@@ -299,19 +299,17 @@ contract TokenDistributionTest is Test {
     // ============ Self-Execute ETH Distribution Tests ============
 
     function test_DistributeETH_Basic() public {
-        mockPremium.setPremium(alice, true);
-
+        // Use distributeFree for free distribution
         Recipient[] memory recipients = _createRecipients(3, 1 ether);
 
         uint256 aliceBalanceBefore = alice.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 3 ether}(
+        distribution.distributeFree{value: 3 ether}(
             address(0),
             0, // tokenType doesn't matter for ETH
             0,
-            recipients,
-            address(0)
+            recipients
         );
 
         // Check recipients received ETH
@@ -324,14 +322,15 @@ contract TokenDistributionTest is Test {
     }
 
     function test_DistributeETH_NonPremiumPaysFee() public {
-        mockPremium.setPremium(alice, false);
+        // Use distribute (paid version) which requires NON_MEMBER_FEE
+        uint256 fee = distribution.NON_MEMBER_FEE();
 
         Recipient[] memory recipients = _createRecipients(2, 1 ether);
 
         uint256 protocolOwnerBalanceBefore = VAULT.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 2 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, address(0));
+        distribution.distribute{value: 2 ether + fee}(address(0), 0, 0, recipients, address(0));
 
         // Recipients received ETH
         assertEq(address(uint160(0x1000)).balance, 1 ether);
@@ -342,68 +341,61 @@ contract TokenDistributionTest is Test {
     }
 
     function test_DistributeETH_WithReferrer() public {
-        mockPremium.setPremium(alice, false);
+        // Use distribute (paid version) with referrer
+        uint256 fee = distribution.NON_MEMBER_FEE();
 
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         uint256 referrerBalanceBefore = referrer.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 1 ether + NON_MEMBER_FEE}(address(0), 0, 0, recipients, referrer);
+        distribution.distribute{value: 1 ether + fee}(address(0), 0, 0, recipients, referrer);
 
         // Referrer received 50% of fee
-        assertEq(referrer.balance, referrerBalanceBefore + NON_MEMBER_FEE / 2);
+        assertEq(referrer.balance, referrerBalanceBefore + fee / 2);
     }
 
     function test_DistributeETH_RefundsExcess() public {
-        mockPremium.setPremium(alice, true);
-
+        // Use distributeFree which refunds excess
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         uint256 aliceBalanceBefore = alice.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 5 ether}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: 5 ether}(address(0), 0, 0, recipients);
 
         // Alice should get 4 ETH back
         assertEq(alice.balance, aliceBalanceBefore - 1 ether);
     }
 
     function test_DistributeETH_InsufficientPaymentReverts() public {
-        mockPremium.setPremium(alice, false);
-
+        uint256 fee = distribution.NON_MEMBER_FEE();
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.InsufficientPayment.selector);
-        distribution.distribute{value: 0.004 ether}( // Less than NON_MEMBER_FEE
+        distribution.distribute{value: fee - 1}( // Less than NON_MEMBER_FEE
             address(0), 0, 0, recipients, address(0)
         );
     }
 
     function test_DistributeETH_BatchTooLargeReverts() public {
-        mockPremium.setPremium(alice, true);
-
         Recipient[] memory recipients = _createRecipients(101, 0.01 ether);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.BatchTooLarge.selector);
-        distribution.distribute{value: 1.01 ether}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: 1.01 ether}(address(0), 0, 0, recipients);
     }
 
     function test_DistributeETH_EmptyRecipientsReverts() public {
-        mockPremium.setPremium(alice, true);
-
         Recipient[] memory recipients = new Recipient[](0);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.BatchTooLarge.selector);
-        distribution.distribute{value: 0}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: 0}(address(0), 0, 0, recipients);
     }
 
     function test_DistributeETH_SkipsZeroAddress() public {
-        mockPremium.setPremium(alice, true);
-
         Recipient[] memory recipients = new Recipient[](2);
         recipients[0] = Recipient({to: address(0), value: 1 ether});
         recipients[1] = Recipient({to: bob, value: 1 ether});
@@ -411,7 +403,7 @@ contract TokenDistributionTest is Test {
         uint256 aliceBalanceBefore = alice.balance;
 
         vm.prank(alice);
-        distribution.distribute{value: 2 ether}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: 2 ether}(address(0), 0, 0, recipients);
 
         // Bob received his ETH
         assertEq(bob.balance, 101 ether); // 100 initial + 1
@@ -423,8 +415,6 @@ contract TokenDistributionTest is Test {
     // ============ Self-Execute ERC20 Distribution Tests ============
 
     function test_DistributeERC20_Basic() public {
-        mockPremium.setPremium(alice, true);
-
         // Mint tokens to alice and approve
         mockToken.mint(alice, 1000 ether);
         vm.prank(alice);
@@ -433,12 +423,11 @@ contract TokenDistributionTest is Test {
         Recipient[] memory recipients = _createRecipients(3, 100 ether);
 
         vm.prank(alice);
-        distribution.distribute(
+        distribution.distributeFree(
             address(mockToken),
             1, // ERC20
             0,
-            recipients,
-            address(0)
+            recipients
         );
 
         // Check recipients received tokens
@@ -449,7 +438,7 @@ contract TokenDistributionTest is Test {
     }
 
     function test_DistributeERC20_NonPremiumPaysFee() public {
-        mockPremium.setPremium(alice, false);
+        uint256 fee = distribution.NON_MEMBER_FEE();
 
         mockToken.mint(alice, 100 ether);
         vm.prank(alice);
@@ -458,7 +447,7 @@ contract TokenDistributionTest is Test {
         Recipient[] memory recipients = _createRecipients(1, 100 ether);
 
         vm.prank(alice);
-        distribution.distribute{value: NON_MEMBER_FEE}(address(mockToken), 1, 0, recipients, address(0));
+        distribution.distribute{value: fee}(address(mockToken), 1, 0, recipients, address(0));
 
         assertEq(mockToken.balanceOf(address(uint160(0x1000))), 100 ether);
     }
@@ -466,8 +455,6 @@ contract TokenDistributionTest is Test {
     // ============ Self-Execute ERC721 Distribution Tests ============
 
     function test_DistributeERC721_Basic() public {
-        mockPremium.setPremium(alice, true);
-
         // Mint NFTs to alice
         mockNFT.mint(alice, 1);
         mockNFT.mint(alice, 2);
@@ -481,12 +468,11 @@ contract TokenDistributionTest is Test {
         recipients[2] = Recipient({to: owner, value: 3}); // tokenId 3
 
         vm.prank(alice);
-        distribution.distribute(
+        distribution.distributeFree(
             address(mockNFT),
             2, // ERC721
             0,
-            recipients,
-            address(0)
+            recipients
         );
 
         assertEq(mockNFT.ownerOf(1), bob);
@@ -497,8 +483,6 @@ contract TokenDistributionTest is Test {
     // ============ Self-Execute ERC1155 Distribution Tests ============
 
     function test_DistributeERC1155_Basic() public {
-        mockPremium.setPremium(alice, true);
-
         // Mint ERC1155 tokens to alice
         uint256 tokenId = 42;
         mockERC1155.mint(alice, tokenId, 300);
@@ -508,12 +492,11 @@ contract TokenDistributionTest is Test {
         Recipient[] memory recipients = _createRecipients(3, 100);
 
         vm.prank(alice);
-        distribution.distribute(
+        distribution.distributeFree(
             address(mockERC1155),
             3, // ERC1155
             tokenId,
-            recipients,
-            address(0)
+            recipients
         );
 
         assertEq(mockERC1155.balanceOf(tokenId, address(uint160(0x1000))), 100);
@@ -524,26 +507,21 @@ contract TokenDistributionTest is Test {
     // ============ Invalid Token Type Tests ============
 
     function test_Distribute_InvalidTokenTypeReverts() public {
-        mockPremium.setPremium(alice, true);
-
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         vm.prank(alice);
         vm.expectRevert(TokenDistribution.InvalidTokenType.selector);
-        distribution.distribute(
+        distribution.distributeFree(
             address(mockToken),
             4, // Invalid type
             0,
-            recipients,
-            address(0)
+            recipients
         );
     }
 
     // ============ Delegated Execute Tests ============
 
     function test_DistributeWithAuth_Basic() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
         // Setup: owner prepares WETH
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
@@ -578,14 +556,13 @@ contract TokenDistributionTest is Test {
         proofLengths[1] = uint8(proof1.length);
 
         vm.prank(executor);
-        distribution.distributeWithAuth(
+        distribution.distributeWithAuthFree(
             auth,
             signature,
             0, // batchId
             recipients,
             allProofs,
-            proofLengths,
-            address(0)
+            proofLengths
         );
 
         // Check recipients received ETH (WETH was unwrapped)
@@ -594,7 +571,7 @@ contract TokenDistributionTest is Test {
     }
 
     function test_DistributeWithAuth_NonPremiumSignerPaysFee() public {
-        mockPremium.setPremium(ownerFromKey, false);
+        uint256 fee = distribution.NON_MEMBER_FEE();
 
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
@@ -622,16 +599,12 @@ contract TokenDistributionTest is Test {
         uint256 protocolOwnerBefore = VAULT.balance;
 
         vm.prank(executor);
-        distribution.distributeWithAuth{value: NON_MEMBER_FEE}(
-            auth, signature, 0, recipients, allProofs, proofLengths, address(0)
-        );
+        distribution.distributeWithAuth{value: fee}(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
 
         assertGt(VAULT.balance, protocolOwnerBefore);
     }
 
     function test_DistributeWithAuth_DeadlineExpiredReverts() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
@@ -654,12 +627,10 @@ contract TokenDistributionTest is Test {
 
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.DeadlineExpired.selector);
-        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
     }
 
     function test_DistributeWithAuth_BatchAlreadyExecutedReverts() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
@@ -685,17 +656,15 @@ contract TokenDistributionTest is Test {
 
         // Execute first time
         vm.prank(executor);
-        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
 
         // Try to execute same batch again
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.BatchAlreadyExecuted.selector);
-        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
     }
 
     function test_DistributeWithAuth_InvalidBatchIdReverts() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
         bytes32 merkleRoot = _computeMerkleRoot(recipients, 0);
 
@@ -810,8 +779,6 @@ contract TokenDistributionTest is Test {
     // ============ Progress Tracking Tests ============
 
     function test_GetProgress() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
@@ -837,9 +804,9 @@ contract TokenDistributionTest is Test {
         uint8[] memory proofLengths = new uint8[](1);
         proofLengths[0] = 0;
 
-        // Execute batch 0
+        // Execute batch 0 using distributeWithAuthFree
         vm.prank(executor);
-        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
 
         (uint256 executedBatches, uint256 totalBatchesValue, uint256 distributed) = distribution.getProgress(uuid);
         assertEq(executedBatches, 1);
@@ -862,12 +829,11 @@ contract TokenDistributionTest is Test {
     // ============ Edge Cases ============
 
     function test_DistributeMaxBatchSize() public {
-        mockPremium.setPremium(alice, true);
-
+        // Use distributeFree to test max batch size
         Recipient[] memory recipients = _createRecipients(100, 0.01 ether);
 
         vm.prank(alice);
-        distribution.distribute{value: 1 ether}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: 1 ether}(address(0), 0, 0, recipients);
 
         // All 100 recipients should have received ETH
         for (uint256 i = 0; i < 100; i++) {
@@ -876,9 +842,7 @@ contract TokenDistributionTest is Test {
     }
 
     function test_DistributeWithAuth_ERC20() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
-        // Setup: owner approves tokens
+        // Setup: owner approves tokens (no premium check needed for distributeWithAuthFree)
         mockToken.mint(ownerFromKey, 1000 ether);
         vm.prank(ownerFromKey);
         mockToken.approve(address(distribution), 1000 ether);
@@ -911,7 +875,7 @@ contract TokenDistributionTest is Test {
         proofLengths[1] = uint8(proof1.length);
 
         vm.prank(executor);
-        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
 
         assertEq(mockToken.balanceOf(address(uint160(0x1000))), 100 ether);
         assertEq(mockToken.balanceOf(address(uint160(0x1001))), 100 ether);
@@ -923,15 +887,14 @@ contract TokenDistributionTest is Test {
         vm.assume(recipientCount > 0 && recipientCount <= 100);
         vm.assume(amountEach > 0 && amountEach <= 1 ether);
 
-        mockPremium.setPremium(alice, true);
-
+        // Use distributeFree for fuzz testing
         Recipient[] memory recipients = _createRecipients(recipientCount, amountEach);
         uint256 totalAmount = uint256(recipientCount) * uint256(amountEach);
 
         vm.deal(alice, totalAmount + 1 ether);
 
         vm.prank(alice);
-        distribution.distribute{value: totalAmount}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: totalAmount}(address(0), 0, 0, recipients);
 
         // Verify first recipient
         assertEq(address(uint160(0x1000)).balance, amountEach);
@@ -940,20 +903,18 @@ contract TokenDistributionTest is Test {
     // ============ Event Tests ============
 
     function test_EmitsDistributedEvent() public {
-        mockPremium.setPremium(alice, true);
-
+        // Test distributeFree emits event with USAGE_FREE (0)
         Recipient[] memory recipients = _createRecipients(2, 1 ether);
 
         vm.expectEmit(true, true, false, true);
-        emit Distributed(alice, address(0), 0, 2, 2 ether, 1); // usageType = 1 = USAGE_PREMIUM
+        emit Distributed(alice, address(0), 0, 2, 2 ether, 0); // usageType = 0 = USAGE_FREE
 
         vm.prank(alice);
-        distribution.distribute{value: 2 ether}(address(0), 0, 0, recipients, address(0));
+        distribution.distributeFree{value: 2 ether}(address(0), 0, 0, recipients);
     }
 
     function test_EmitsReferralPaidEvent() public {
-        mockPremium.setPremium(alice, false);
-
+        // Paid distribution with referrer emits ReferralPaid event
         Recipient[] memory recipients = _createRecipients(1, 1 ether);
 
         vm.expectEmit(true, false, false, true);
@@ -966,8 +927,6 @@ contract TokenDistributionTest is Test {
     // ============ Proof Length Validation Tests ============
 
     function test_DistributeWithAuth_InvalidProofLengthReverts() public {
-        mockPremium.setPremium(ownerFromKey, true);
-
         vm.prank(ownerFromKey);
         weth.depositAndApprove{value: 10 ether}(address(distribution));
 
@@ -996,14 +955,13 @@ contract TokenDistributionTest is Test {
 
         vm.prank(executor);
         vm.expectRevert(TokenDistribution.InvalidProofLength.selector);
-        distribution.distributeWithAuth(auth, signature, 0, recipients, allProofs, proofLengths, address(0));
+        distribution.distributeWithAuthFree(auth, signature, 0, recipients, allProofs, proofLengths);
     }
 
     // ============ Fee Collection Fix Test ============
 
     function test_FeeCollection_ReferrerGets50Percent() public {
-        mockPremium.setPremium(alice, false);
-
+        // Paid distribution with referrer - fee is split 50/50
         Recipient[] memory recipients = _createRecipients(1, 0.1 ether);
 
         uint256 referrerBalanceBefore = referrer.balance;

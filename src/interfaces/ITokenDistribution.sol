@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IBiuBiuPremium} from "./IBiuBiuPremium.sol";
 import {IWETH} from "./IWETH.sol";
 
 /**
@@ -64,23 +63,19 @@ interface ITokenDistribution {
     function TOKEN_TYPE_ERC721() external view returns (uint8);
     function TOKEN_TYPE_ERC1155() external view returns (uint8);
     function USAGE_FREE() external view returns (uint8);
-    function USAGE_PREMIUM() external view returns (uint8);
     function USAGE_PAID() external view returns (uint8);
+    function VAULT() external view returns (address);
+    function NON_MEMBER_FEE() external view returns (uint256);
     function DOMAIN_TYPEHASH() external view returns (bytes32);
     function DISTRIBUTION_AUTH_TYPEHASH() external view returns (bytes32);
     function DOMAIN_SEPARATOR() external view returns (bytes32);
 
     // ============ State Variables ============
 
-    function PREMIUM_CONTRACT() external view returns (IBiuBiuPremium);
     function WETH() external view returns (IWETH);
-    function VAULT() external view returns (address);
-    function NON_MEMBER_FEE() external view returns (uint256);
     function totalFreeUsage() external view returns (uint256);
-    function totalPremiumUsage() external view returns (uint256);
     function totalPaidUsage() external view returns (uint256);
     function totalFreeAuthUsage() external view returns (uint256);
-    function totalPremiumAuthUsage() external view returns (uint256);
     function totalPaidAuthUsage() external view returns (uint256);
 
     // ============ Main Functions ============
