@@ -10,7 +10,7 @@ contract KnockProtocolTest is Test {
     KnockProtocol public protocol;
 
     address public owner = address(this);
-    address public protocolFeeReceiver = address(0x999);
+    address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
     address public alice = address(0x1);
     address public bob = address(0x2);
     address public carol = address(0x3);
@@ -19,21 +19,21 @@ contract KnockProtocolTest is Test {
     uint256 public constant MIN_BID = 0.01 ether;
 
     function setUp() public {
-        card = new KnockCard();
-        protocol = new KnockProtocol(address(card), protocolFeeReceiver);
-        card.setProtocol(address(protocol));
+        protocol = new KnockProtocol();
+        card = KnockCard(address(protocol.knockCard()));
 
         // Fund test accounts
         vm.deal(alice, 10 ether);
         vm.deal(bob, 10 ether);
         vm.deal(carol, 10 ether);
+        vm.deal(VAULT, 0); // Ensure VAULT starts with 0 balance for testing
     }
 
     // ============ Card Tests ============
 
     function test_CreateCard() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "@alice", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "@alice", "", "");
 
         assertTrue(card.hasCard(alice));
         IKnockCard.Card memory c = card.getCard(alice);
@@ -43,34 +43,34 @@ contract KnockProtocolTest is Test {
 
     function test_CreateCard_RevertIfAlreadyExists() public {
         vm.startPrank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
 
         vm.expectRevert(IKnockCard.CardAlreadyExists.selector);
-        card.createCard{value: CARD_FEE}("Alice2", "Hello2", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice2", "Hello2", "", "", "");
         vm.stopPrank();
     }
 
     function test_CreateCard_RevertIfInsufficientPayment() public {
         vm.prank(alice);
         vm.expectRevert(IKnockCard.InsufficientPayment.selector);
-        card.createCard{value: 0.05 ether}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: 0.05 ether}("Alice", "Hello", "", "", "");
     }
 
     function test_UpdateCard() public {
         vm.startPrank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
-        card.updateCard{value: CARD_FEE}("Alice Updated", "New bio", "", "@newalice", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
+        card.updateCard{value: CARD_FEE}("New bio", "@newalice", "", "");
         vm.stopPrank();
 
         IKnockCard.Card memory c = card.getCard(alice);
-        assertEq(c.nickname, "Alice Updated");
+        assertEq(c.nickname, "Alice"); // nickname is immutable
         assertEq(c.bio, "New bio");
         assertEq(c.twitter, "@newalice");
     }
 
     function test_CardTransferNotAllowed() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
 
         vm.expectRevert(IKnockCard.TransferNotAllowed.selector);
         card.transferFrom(alice, bob, uint256(uint160(alice)));
@@ -81,7 +81,7 @@ contract KnockProtocolTest is Test {
     function test_SendKnock() public {
         // Create cards
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
 
         // Send knock
         vm.prank(alice);
@@ -103,7 +103,7 @@ contract KnockProtocolTest is Test {
 
     function test_SendKnock_RevertIfBidTooLow() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
 
         vm.prank(alice);
         vm.expectRevert(IKnockProtocol.BidTooLow.selector);
@@ -112,7 +112,7 @@ contract KnockProtocolTest is Test {
 
     function test_SendKnock_RevertIfTooManyPending() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
 
         vm.startPrank(alice);
         protocol.knock{value: 0.1 ether}(bob, keccak256("content1"));
@@ -126,7 +126,7 @@ contract KnockProtocolTest is Test {
 
     function test_SendKnock_RevertIfKnockSelf() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "Hello", "", "", "");
 
         vm.prank(alice);
         vm.expectRevert(IKnockProtocol.CannotKnockSelf.selector);
@@ -138,9 +138,9 @@ contract KnockProtocolTest is Test {
     function test_Settlement_SelectsTopBids() public {
         // Create cards for senders
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
         vm.prank(carol);
-        card.createCard{value: CARD_FEE}("Carol", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Carol", "", "", "", "");
 
         // Bob sets 1 slot
         vm.prank(bob);
@@ -166,7 +166,7 @@ contract KnockProtocolTest is Test {
 
     function test_Settlement_RefundsNotSelected() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
 
         vm.prank(bob);
         protocol.setDailySlots(1);
@@ -177,7 +177,7 @@ contract KnockProtocolTest is Test {
 
         // Carol sends higher bid
         vm.prank(carol);
-        card.createCard{value: CARD_FEE}("Carol", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Carol", "", "", "", "");
         vm.prank(carol);
         protocol.knock{value: 0.2 ether}(bob, keccak256("carol"));
 
@@ -196,7 +196,7 @@ contract KnockProtocolTest is Test {
     function test_Accept() public {
         // Setup
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
         vm.prank(alice);
         uint256 knockId = protocol.knock{value: 1 ether}(bob, keccak256("content"));
 
@@ -207,7 +207,7 @@ contract KnockProtocolTest is Test {
         // Record balances
         uint256 aliceBalanceBefore = alice.balance;
         uint256 bobBalanceBefore = bob.balance;
-        uint256 protocolBalanceBefore = protocolFeeReceiver.balance;
+        uint256 protocolBalanceBefore = VAULT.balance;
 
         // Accept
         vm.prank(bob);
@@ -216,7 +216,7 @@ contract KnockProtocolTest is Test {
         // Check distribution: Sender 40%, Receiver 40%, Protocol 20%
         assertEq(alice.balance, aliceBalanceBefore + 0.4 ether);
         assertEq(bob.balance, bobBalanceBefore + 0.4 ether);
-        assertEq(protocolFeeReceiver.balance, protocolBalanceBefore + 0.2 ether);
+        assertEq(VAULT.balance, protocolBalanceBefore + 0.2 ether);
 
         // Check status
         IKnockProtocol.Knock memory k = protocol.getKnock(knockId);
@@ -226,7 +226,7 @@ contract KnockProtocolTest is Test {
     function test_Reject() public {
         // Setup
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
         vm.prank(alice);
         uint256 knockId = protocol.knock{value: 1 ether}(bob, keccak256("content"));
 
@@ -237,7 +237,7 @@ contract KnockProtocolTest is Test {
         // Record balances
         uint256 aliceBalanceBefore = alice.balance;
         uint256 bobBalanceBefore = bob.balance;
-        uint256 protocolBalanceBefore = protocolFeeReceiver.balance;
+        uint256 protocolBalanceBefore = VAULT.balance;
 
         // Reject
         vm.prank(bob);
@@ -246,7 +246,7 @@ contract KnockProtocolTest is Test {
         // Check distribution: Receiver 80%, Protocol 20%
         assertEq(alice.balance, aliceBalanceBefore); // Sender gets nothing
         assertEq(bob.balance, bobBalanceBefore + 0.8 ether);
-        assertEq(protocolFeeReceiver.balance, protocolBalanceBefore + 0.2 ether);
+        assertEq(VAULT.balance, protocolBalanceBefore + 0.2 ether);
 
         // Check status
         IKnockProtocol.Knock memory k = protocol.getKnock(knockId);
@@ -258,7 +258,7 @@ contract KnockProtocolTest is Test {
     function test_ClaimExpired() public {
         // Setup
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
         vm.prank(alice);
         uint256 knockId = protocol.knock{value: 1 ether}(bob, keccak256("content"));
 
@@ -283,7 +283,7 @@ contract KnockProtocolTest is Test {
     function test_ClaimExpired_RevertIfNotExpired() public {
         // Setup
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
         vm.prank(alice);
         uint256 knockId = protocol.knock{value: 1 ether}(bob, keccak256("content"));
 
@@ -301,7 +301,7 @@ contract KnockProtocolTest is Test {
 
     function test_ReceiverStats() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
 
         vm.prank(alice);
         protocol.knock{value: 0.5 ether}(bob, keccak256("content"));
@@ -313,7 +313,7 @@ contract KnockProtocolTest is Test {
 
     function test_SenderStats() public {
         vm.prank(alice);
-        card.createCard{value: CARD_FEE}("Alice", "", "", "", "", "");
+        card.createCard{value: CARD_FEE}("Alice", "", "", "", "");
 
         vm.prank(alice);
         uint256 knockId = protocol.knock{value: 0.5 ether}(bob, keccak256("content"));
