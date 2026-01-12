@@ -56,7 +56,7 @@ All contracts use CREATE2 for deterministic deployment addresses across any EVM 
 | Contract | Address | Note |
 |----------|---------|------|
 | WETH | `0x8c818450FD5C285923e76Be0dd0160Ad83dF396C` | |
-| BiuBiuPremium | `0xB131b71A5969C941Ed824504427e26934623294c` | |
+| BiuBiuPremium | `0x0aCDaae6b87c30306f70f3936B4eac3D0073C6Eb` | |
 | NFTMetadata | `0x4380Ccb96103bDcA6839be9710c997C59f9b8954` | |
 | TokenFactory | `0xf821f1ea1cEc1b2f6e805a011BB22034936e5982` | |
 | NFTFactory | `0xc0Be3ABa94d02bB392FB9dc257049e9240F09060` | |
