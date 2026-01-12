@@ -5,6 +5,10 @@ pragma solidity ^0.8.20;
  * @title ITokenSweep
  * @notice Interface for TokenSweep batch token collection
  * @dev Stable API for frontend and other contracts to interact with TokenSweep
+ *
+ * @dev IMPORTANT: Requires EIP-7702 (Set EOA account code)
+ * Each wallet must delegate its code to TokenSweep via EIP-7702 before calling multicall.
+ * See TokenSweep.sol for detailed documentation on the EIP-7702 dependency.
  */
 
 struct Wallet {
@@ -68,12 +72,18 @@ interface ITokenSweep {
     ) external;
 
     /**
-     * @notice Drain all tokens from this contract to recipient
-     * @dev Called by multicall on each wallet that delegated to TokenSweep
+     * @notice Drain all tokens from the calling context to recipient
+     * @dev Called by multicall on each EOA that delegated its code to TokenSweep via EIP-7702
+     *
+     * EIP-7702 Context:
+     * - When called on a delegated EOA, `address(this)` is the EOA's address
+     * - The signature must be signed by the EOA's private key (ecrecover == address(this))
+     * - Token.transfer() operates on the EOA's token balances
+     *
      * @param recipient Address to receive tokens
-     * @param tokens Array of token addresses to sweep
+     * @param tokens Array of token addresses to sweep (address(0) entries are skipped)
      * @param deadline Timestamp after which the operation is invalid
-     * @param signature Wallet owner's signature authorizing the drain
+     * @param signature EOA owner's signature authorizing the drain (EIP-191 personal_sign format)
      */
     function drainToAddress(address recipient, address[] calldata tokens, uint256 deadline, bytes calldata signature)
         external;

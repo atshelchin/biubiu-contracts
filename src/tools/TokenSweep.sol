@@ -7,6 +7,33 @@ import {ITokenSweep, Wallet} from "../interfaces/ITokenSweep.sol";
  * @title TokenSweep
  * @notice Batch sweep tokens from multiple wallets to a single recipient
  * @dev Part of BiuBiu Tools - https://biubiu.tools
+ *
+ * @dev IMPORTANT: This contract requires EIP-7702 (Set EOA account code)
+ *
+ * EIP-7702 Dependency:
+ * - Each wallet in the `wallets` array must be an EOA that has delegated its code to this contract via EIP-7702
+ * - The EOA signs a 7702 authorization: `authorization = [chain_id, address(TokenSweep), nonce, ...]`
+ * - After delegation, the EOA can be "called" as if it were this contract
+ * - When `drainToAddress` is called on the delegated EOA:
+ *   - `address(this)` returns the EOA's address (not TokenSweep's address)
+ *   - The EOA's private key can sign messages where `ecrecover() == address(this)`
+ *   - Token transfers use the EOA's balances directly
+ *
+ * Flow:
+ * 1. User delegates EOA code to TokenSweep via EIP-7702 transaction
+ * 2. User signs drain authorization with EOA's private key
+ * 3. Anyone calls `multicall([{wallet: EOA, signature: ...}], recipient, tokens, ...)`
+ * 4. TokenSweep calls `EOA.drainToAddress(...)` which executes this contract's code in EOA's context
+ * 5. Tokens are transferred from EOA to recipient
+ *
+ * Security:
+ * - Only the EOA's private key holder can sign valid drain authorizations
+ * - Signature includes chainId, recipient, tokens, and deadline to prevent replay attacks
+ * - EIP-7702 delegation can be revoked by the EOA owner at any time
+ *
+ * Compatibility:
+ * - Requires EVM chains supporting EIP-7702 (Ethereum post-Pectra upgrade)
+ * - NOT compatible with chains without EIP-7702 (Tron, BSC pre-upgrade, etc.)
  */
 
 interface IERC20 {
