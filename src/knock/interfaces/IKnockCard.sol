@@ -3,17 +3,17 @@ pragma solidity ^0.8.20;
 
 interface IKnockCard {
     struct Card {
-        string nickname;      // Unique, immutable once set
+        string nickname; // Unique, immutable once set
         string bio;
         string twitter;
         string github;
         string website;
         uint256 createdAt;
-        uint256 ethReceived;      // Total ETH received from knocks (in wei) - most authoritative metric
-        uint256 knocksReceived;   // Incoming knock requests (like followers)
-        uint256 knocksSent;       // Outgoing knock requests (like following)
-        uint256 knocksAccepted;   // Sender's knocks that were accepted
-        uint256 knocksRejected;   // Sender's knocks that were rejected
+        uint256 ethReceived; // Total ETH received from knocks (in wei) - most authoritative metric
+        uint256 knocksReceived; // Incoming knock requests (like followers)
+        uint256 knocksSent; // Outgoing knock requests (like following)
+        uint256 knocksAccepted; // Sender's knocks that were accepted
+        uint256 knocksRejected; // Sender's knocks that were rejected
         bool isBanned;
     }
 
@@ -39,12 +39,9 @@ interface IKnockCard {
         string calldata website
     ) external payable;
 
-    function updateCard(
-        string calldata bio,
-        string calldata twitter,
-        string calldata github,
-        string calldata website
-    ) external payable;
+    function updateCard(string calldata bio, string calldata twitter, string calldata github, string calldata website)
+        external
+        payable;
 
     function getCard(address owner) external view returns (Card memory);
     function hasCard(address owner) external view returns (bool);

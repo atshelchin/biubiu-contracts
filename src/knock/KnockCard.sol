@@ -87,12 +87,10 @@ contract KnockCard is IKnockCard {
     }
 
     /// @notice Update card information (nickname cannot be changed)
-    function updateCard(
-        string calldata bio,
-        string calldata twitter,
-        string calldata github,
-        string calldata website
-    ) external payable {
+    function updateCard(string calldata bio, string calldata twitter, string calldata github, string calldata website)
+        external
+        payable
+    {
         if (!_hasCard[msg.sender]) revert CardNotFound();
         if (_cards[msg.sender].isBanned) revert CardIsBanned();
         if (msg.value < CARD_FEE) revert InsufficientPayment();
@@ -214,9 +212,8 @@ contract KnockCard is IKnockCard {
 
         if (metadataContract != address(0)) {
             // Call metadata contract to generate SVG
-            (bool success, bytes memory data) = metadataContract.staticcall(
-                abi.encodeWithSignature("generateMetadata(address)", cardOwner)
-            );
+            (bool success, bytes memory data) =
+                metadataContract.staticcall(abi.encodeWithSignature("generateMetadata(address)", cardOwner));
             if (success && data.length > 0) {
                 return abi.decode(data, (string));
             }
@@ -255,8 +252,8 @@ contract KnockCard is IKnockCard {
     }
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == 0x80ac58cd || // ERC721
-            interfaceId == 0x01ffc9a7; // ERC165
+        return interfaceId == 0x80ac58cd // ERC721
+            || interfaceId == 0x01ffc9a7; // ERC165
     }
 
     // ============ Internal Functions ============

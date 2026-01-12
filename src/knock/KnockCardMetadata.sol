@@ -14,7 +14,7 @@ contract KnockCardMetadata {
         ["#10b981", "#34d399", "#6ee7b7", "#a7f3d0"], // Newcomer - Green
         ["#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"], // Active - Blue
         ["#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe"], // Trusted - Purple
-        ["#f59e0b", "#fbbf24", "#fcd34d", "#fde68a"]  // Elite - Gold
+        ["#f59e0b", "#fbbf24", "#fcd34d", "#fde68a"] // Elite - Gold
     ];
 
     // Background gradients [start, end]
@@ -22,7 +22,7 @@ contract KnockCardMetadata {
         ["#064e3b", "#059669"], // Green
         ["#1e3a5f", "#2563eb"], // Blue
         ["#4c1d95", "#7c3aed"], // Purple
-        ["#78350f", "#b45309"]  // Gold
+        ["#78350f", "#b45309"] // Gold
     ];
 
     IKnockCard public immutable knockCard;
@@ -77,7 +77,16 @@ contract KnockCardMetadata {
                 _levelBadge(level, c),
                 _nickname(card.nickname, owner, c),
                 _bio(card.bio, c),
-                _reputation(card.twitter, card.github, card.website, card.ethReceived, card.knocksSent, card.knocksAccepted, card.knocksRejected, c),
+                _reputation(
+                    card.twitter,
+                    card.github,
+                    card.website,
+                    card.ethReceived,
+                    card.knocksSent,
+                    card.knocksAccepted,
+                    card.knocksRejected,
+                    c
+                ),
                 _footer(level, c),
                 "</svg>"
             )
@@ -89,11 +98,9 @@ contract KnockCardMetadata {
     function _defs(string[4] memory c, string[2] memory bg, uint8 level) internal pure returns (string memory) {
         string memory animation = level >= 3
             ? "<style>@keyframes glow{0%,100%{filter:drop-shadow(0 0 8px rgba(251,191,36,0.6))}50%{filter:drop-shadow(0 0 16px rgba(251,191,36,0.9))}}.elite{animation:glow 2s infinite}</style>"
-            : (
-                level >= 2
+            : (level >= 2
                     ? "<style>@keyframes pulse{0%,100%{opacity:0.8}50%{opacity:1}}.pulse{animation:pulse 3s infinite}</style>"
-                    : ""
-            );
+                    : "");
 
         return string(
             abi.encodePacked(
@@ -316,7 +323,9 @@ contract KnockCardMetadata {
                 _ts(y + 18),
                 '" font-family="Arial,sans-serif" font-size="12" fill="',
                 c[2],
-                '">', label, "</text>",
+                '">',
+                label,
+                "</text>",
                 '<text x="320" y="',
                 _ts(y + 18),
                 '" font-family="Arial,sans-serif" font-size="',

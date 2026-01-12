@@ -17,12 +17,12 @@ contract KnockProtocol is IKnockProtocol {
     uint256 public constant DEFAULT_DAILY_SLOTS = 10;
 
     // Fee distribution (basis points, 100 = 1%)
-    uint256 public constant ACCEPTED_SENDER_SHARE = 4000;      // 40%
-    uint256 public constant ACCEPTED_RECEIVER_SHARE = 4000;    // 40%
-    uint256 public constant ACCEPTED_PROTOCOL_SHARE = 2000;    // 20%
+    uint256 public constant ACCEPTED_SENDER_SHARE = 4000; // 40%
+    uint256 public constant ACCEPTED_RECEIVER_SHARE = 4000; // 40%
+    uint256 public constant ACCEPTED_PROTOCOL_SHARE = 2000; // 20%
 
-    uint256 public constant REJECTED_RECEIVER_SHARE = 8000;    // 80%
-    uint256 public constant REJECTED_PROTOCOL_SHARE = 2000;    // 20%
+    uint256 public constant REJECTED_RECEIVER_SHARE = 8000; // 80%
+    uint256 public constant REJECTED_PROTOCOL_SHARE = 2000; // 20%
 
     // ============ State ============
 
@@ -93,8 +93,8 @@ contract KnockProtocol is IKnockProtocol {
 
         // Update stats
         knockCard.incrementKnocksSent(msg.sender);
-        knockCard.addEthReceived(receiver, msg.value);  // Track ETH on card (most authoritative metric)
-        knockCard.incrementKnocksReceived(receiver);    // Track knock count on card
+        knockCard.addEthReceived(receiver, msg.value); // Track ETH on card (most authoritative metric)
+        knockCard.incrementKnocksReceived(receiver); // Track knock count on card
         _receiverStats[receiver].totalReceived++;
         _receiverStats[receiver].totalEthReceived += msg.value;
 
@@ -167,7 +167,7 @@ contract KnockProtocol is IKnockProtocol {
         _refund(VAULT, protocolShare);
 
         // Update stats
-        knockCard.incrementKnocksAccepted(k.sender);  // Track sender's accepted knocks
+        knockCard.incrementKnocksAccepted(k.sender); // Track sender's accepted knocks
         _receiverStats[k.receiver].accepted++;
 
         // Remove from settled list

@@ -3,12 +3,12 @@ pragma solidity ^0.8.20;
 
 interface IKnockProtocol {
     enum KnockStatus {
-        Pending,    // Waiting for daily settlement
-        Settled,    // Selected, waiting for receiver to process
-        Accepted,   // Receiver accepted
-        Rejected,   // Receiver rejected
-        Refunded,   // Not selected, refunded
-        Expired     // Not processed within 7 days
+        Pending, // Waiting for daily settlement
+        Settled, // Selected, waiting for receiver to process
+        Accepted, // Receiver accepted
+        Rejected, // Receiver rejected
+        Refunded, // Not selected, refunded
+        Expired // Not processed within 7 days
     }
 
     struct Knock {
@@ -16,15 +16,15 @@ interface IKnockProtocol {
         address sender;
         address receiver;
         uint256 bid;
-        bytes32 contentId;      // PDF file ID from official platform
+        bytes32 contentId; // PDF file ID from official platform
         uint256 createdAt;
-        uint256 settleDay;      // UTC day number for settlement
+        uint256 settleDay; // UTC day number for settlement
         KnockStatus status;
     }
 
     struct ReceiverSettings {
-        uint256 dailySlots;     // Max knocks to receive per day (default 10)
-        bool isConfigured;      // Whether receiver has configured settings
+        uint256 dailySlots; // Max knocks to receive per day (default 10)
+        bool isConfigured; // Whether receiver has configured settings
     }
 
     struct ReceiverStats {
@@ -36,11 +36,7 @@ interface IKnockProtocol {
 
     // Events
     event KnockSent(
-        uint256 indexed knockId,
-        address indexed sender,
-        address indexed receiver,
-        uint256 bid,
-        bytes32 contentId
+        uint256 indexed knockId, address indexed sender, address indexed receiver, uint256 bid, bytes32 contentId
     );
     event KnockSettled(uint256 indexed knockId, bool selected);
     event KnockAccepted(uint256 indexed knockId, address indexed receiver);
