@@ -8,8 +8,6 @@ A collection of Solidity smart contracts for token creation, NFT minting, batch 
 src/
 ├── core/                    # Core protocol contracts
 │   ├── BiuBiuPremium.sol   # Premium membership subscription NFT
-│   ├── BiuBiuVault.sol     # Epoch-based revenue distribution vault
-│   ├── BiuBiuShare.sol     # DAO token for vault rewards
 │   └── WETH.sol            # Wrapped ETH with depositAndApprove
 ├── tools/                   # Tool contracts
 │   ├── TokenFactory.sol    # CREATE2 ERC20 token deployment
@@ -19,8 +17,6 @@ src/
 │   └── TokenSweep.sol      # Multi-wallet token sweep
 └── interfaces/              # Stable API interfaces
     ├── IBiuBiuPremium.sol
-    ├── IBiuBiuVault.sol
-    ├── IBiuBiuShare.sol
     ├── IWETH.sol
     ├── ITokenFactory.sol
     ├── INFTFactory.sol
@@ -36,9 +32,9 @@ src/
 | Contract | Description |
 |----------|-------------|
 | **BiuBiuPremium** | Premium membership subscription NFT (Monthly/Yearly tiers) with referral system |
-| **BiuBiuVault** | Epoch-based revenue distribution vault for DAO token holders |
-| **BiuBiuShare** | ERC20 DAO token with fixed supply for vault rewards |
 | **WETH** | Wrapped ETH with `depositAndApprove` functionality |
+
+**Revenue Vault:** `0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA` (Safe Wallet)
 
 ### Tool Contracts
 
@@ -61,13 +57,13 @@ All contracts use CREATE2 for deterministic deployment addresses across any EVM 
 |----------|---------|------|
 | WETH | `0x8c818450FD5C285923e76Be0dd0160Ad83dF396C` | |
 | BiuBiuPremium | `0x469fd92aAd37648f31d3EDc1955C840a75306F78` | |
-| BiuBiuVault | `0x6233BE8a53D878B8cCbDA35692Ee901C3201032C` | |
-| BiuBiuShare | `0x58CF0902133F6965f3E28FB4BD54AdfcA9295806` | Deployed by BiuBiuVault |
 | NFTMetadata | `0x4380Ccb96103bDcA6839be9710c997C59f9b8954` | |
 | TokenFactory | `0x0a1f50ccc66d0688e1353F1581F31d03F8C7A1e3` | |
 | NFTFactory | `0xDe9245EC38A3Ae0028a8E4CfBA5825eDee1270F0` | |
 | TokenDistribution | `0x6CB341DC6cb7da4Ae9b2B2aE15Ad97a1c74c3c07` | |
 | TokenSweep | `0x0385D461BC94b60C791951242Df148033E641b27` | |
+
+**Safe Wallet (Vault):** `0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA`
 
 ## Interfaces
 
@@ -106,8 +102,6 @@ All contracts have been audited. See [audits/](audits/) for detailed reports.
 |----------|------------|
 | WETH | LOW |
 | BiuBiuPremium | LOW |
-| BiuBiuVault | LOW |
-| BiuBiuShare | MINIMAL |
 | TokenFactory | LOW |
 | NFTFactory | LOW |
 | NFTMetadata | MINIMAL |

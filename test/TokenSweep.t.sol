@@ -30,7 +30,7 @@ contract TokenSweepTest is Test {
     BiuBiuPremium public premium;
     MockERC20 public token;
 
-    address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
+    address public vault = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
     address public premiumMember;
     uint256 public premiumMemberKey;
     address public nonMember;

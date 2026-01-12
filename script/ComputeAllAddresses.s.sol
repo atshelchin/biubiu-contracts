@@ -9,7 +9,6 @@ import {WETH} from "../src/core/WETH.sol";
 import {TokenDistribution} from "../src/tools/TokenDistribution.sol";
 import {TokenSweep} from "../src/tools/TokenSweep.sol";
 import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
-import {BiuBiuVault} from "../src/core/BiuBiuVault.sol";
 
 /// @title ComputeAllAddresses
 /// @notice Computes deterministic CREATE2 addresses for all contracts in src/
@@ -59,17 +58,6 @@ contract ComputeAllAddressesScript is Script {
         // BiuBiuPremium
         _printContractInfo("BiuBiuPremium", type(BiuBiuPremium).creationCode, salt);
 
-        // BiuBiuVault
-        address biubiuVaultAddr = _computeCreate2Address(type(BiuBiuVault).creationCode, salt);
-        _printContractInfo("BiuBiuVault", type(BiuBiuVault).creationCode, salt);
-
-        // BiuBiuShare (deployed by BiuBiuVault constructor via CREATE with nonce=1)
-        address biubiuShareAddr = _computeCreateAddress(biubiuVaultAddr, 1);
-        console.log("");
-        console.log("BiuBiuShare");
-        console.log("  Address:", biubiuShareAddr);
-        console.log("  (Deployed by BiuBiuVault via CREATE)");
-
         console.log("-------------------------------------");
         console.log("");
         console.log("Usage: Update hardcoded addresses in contracts");
@@ -95,12 +83,6 @@ contract ComputeAllAddressesScript is Script {
         return address(uint160(uint256(hash)));
     }
 
-    function _computeCreateAddress(address deployer, uint256 nonce) internal pure returns (address) {
-        // For nonce = 1: RLP([deployer, 0x01])
-        bytes memory data = abi.encodePacked(bytes1(0xd6), bytes1(0x94), deployer, bytes1(0x01));
-        return address(uint160(uint256(keccak256(data))));
-    }
-
     /// @notice Get the predicted address for a specific contract
     /// @param contractName The name of the contract
     /// @return The predicted CREATE2 address
@@ -121,8 +103,6 @@ contract ComputeAllAddressesScript is Script {
             return _computeCreate2Address(type(TokenSweep).creationCode, salt);
         } else if (keccak256(bytes(contractName)) == keccak256(bytes("BiuBiuPremium"))) {
             return _computeCreate2Address(type(BiuBiuPremium).creationCode, salt);
-        } else if (keccak256(bytes(contractName)) == keccak256(bytes("BiuBiuVault"))) {
-            return _computeCreate2Address(type(BiuBiuVault).creationCode, salt);
         }
         revert("Unknown contract name");
     }
@@ -130,7 +110,7 @@ contract ComputeAllAddressesScript is Script {
     /// @notice Get all contract addresses as a struct array
     function getAllAddresses() external pure returns (ContractInfo[] memory) {
         bytes32 salt = bytes32(uint256(0));
-        ContractInfo[] memory contracts = new ContractInfo[](8);
+        ContractInfo[] memory contracts = new ContractInfo[](7);
 
         bytes memory wethBytecode = type(WETH).creationCode;
         contracts[0] = ContractInfo({
@@ -186,14 +166,6 @@ contract ComputeAllAddressesScript is Script {
             predictedAddress: _computeCreate2Address(bbpBytecode, salt),
             bytecodeHash: keccak256(bbpBytecode),
             bytecodeLength: bbpBytecode.length
-        });
-
-        bytes memory bbvBytecode = type(BiuBiuVault).creationCode;
-        contracts[7] = ContractInfo({
-            name: "BiuBiuVault",
-            predictedAddress: _computeCreate2Address(bbvBytecode, salt),
-            bytecodeHash: keccak256(bbvBytecode),
-            bytecodeLength: bbvBytecode.length
         });
 
         return contracts;

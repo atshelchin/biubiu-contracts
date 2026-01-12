@@ -7,7 +7,7 @@ import {IBiuBiuPremium} from "../src/interfaces/IBiuBiuPremium.sol";
 
 contract BiuBiuPremiumTest is Test {
     BiuBiuPremium public premium;
-    address public vault = 0x46AFD0cA864D4E5235DA38a71687163Dc83828cE;
+    address public vault = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
     address public user1 = address(0x1);
     address public user2 = address(0x2);
     address public referrer = address(0x3);
