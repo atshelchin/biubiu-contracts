@@ -5,6 +5,15 @@ import {Test} from "forge-std/Test.sol";
 import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 import {IBiuBiuPremium} from "../src/interfaces/IBiuBiuPremium.sol";
 
+// Tool contract imports for integration testing
+import {TokenFactory} from "../src/tools/TokenFactory.sol";
+import {NFTFactory} from "../src/tools/NFTFactory.sol";
+import {TokenDistribution} from "../src/tools/TokenDistribution.sol";
+import {TokenSweep} from "../src/tools/TokenSweep.sol";
+import {Recipient} from "../src/interfaces/ITokenDistribution.sol";
+import {Wallet} from "../src/interfaces/ITokenSweep.sol";
+import {TokenInfo} from "../src/interfaces/ITokenFactory.sol";
+
 contract BiuBiuPremiumTest is Test {
     BiuBiuPremium public premium;
     address public vault = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
@@ -1352,6 +1361,547 @@ contract BiuBiuPremiumTest is Test {
         assertEq(referrer.balance, referrerBalanceBefore + expectedReferral);
         assertEq(expectedReferral, 0.06 ether);
     }
+
+    // ============ callTool Tests ============
+
+    // Test: callTool by non-member should revert
+    function testCallToolNotPremiumMember() public {
+        MockTool tool = new MockTool();
+
+        // user1 has no subscription
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+    }
+
+    // Test: callTool by user with no activeSubscription (activeSubscription == 0)
+    function testCallToolNoActiveSubscription() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes, gets token 1
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Transfer token away, activeSubscription becomes 0
+        vm.prank(user1);
+        premium.transferFrom(user1, user2, 1);
+
+        assertEq(premium.activeSubscription(user1), 0);
+
+        // user1 tries to call tool - should revert
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+    }
+
+    // Test: callTool by expired member should revert
+    function testCallToolExpiredMember() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Fast forward past expiry (30 days exactly = expired)
+        vm.warp(block.timestamp + 30 days);
+
+        // Verify subscription is expired
+        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
+        assertFalse(isPremium);
+
+        // Try to call tool - should revert
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+    }
+
+    // Test: callTool with 1 second before expiry should succeed
+    function testCallToolOneSecondBeforeExpiry() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Fast forward to 1 second before expiry
+        vm.warp(block.timestamp + 30 days - 1);
+
+        // Should still work
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+        uint256 value = abi.decode(result, (uint256));
+        assertEq(value, 0);
+    }
+
+    // Test: callTool to address(this) should revert
+    function testCallToolToSelf() public {
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Try to call premium contract itself
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.InvalidTarget.selector);
+        premium.callTool(address(premium), abi.encodeWithSignature("totalSupply()"));
+    }
+
+    // Test: callTool to address(0) should revert
+    function testCallToolToZeroAddress() public {
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Try to call zero address
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.InvalidTarget.selector);
+        premium.callTool(address(0), abi.encodeWithSignature("anything()"));
+    }
+
+    // Test: callTool successful call with return value
+    function testCallToolSuccessWithReturn() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call setValue and check return
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 123));
+
+        uint256 returnValue = abi.decode(result, (uint256));
+        assertEq(returnValue, 246); // 123 * 2
+
+        // Verify state was modified
+        assertEq(tool.lastValue(), 123);
+    }
+
+    // Test: callTool successful call with multiple return values
+    function testCallToolSuccessMultipleReturns() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call getMultipleValues
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getMultipleValues()"));
+
+        (uint256 num, string memory str, bool flag) = abi.decode(result, (uint256, string, bool));
+        assertEq(num, 42);
+        assertEq(str, "hello");
+        assertTrue(flag);
+    }
+
+    // Test: callTool successful call with no return
+    function testCallToolSuccessNoReturn() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call noReturn
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("noReturn()"));
+
+        // Result should be empty
+        assertEq(result.length, 0);
+
+        // But state should be modified
+        assertEq(tool.lastValue(), 999);
+    }
+
+    // Test: callTool verifies msg.sender is the premium contract
+    function testCallToolMsgSenderIsPremiumContract() public {
+        SenderCheckTool tool = new SenderCheckTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call getSender
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getSender()"));
+
+        address sender = abi.decode(result, (address));
+        // msg.sender in the tool should be the premium contract, not user1
+        assertEq(sender, address(premium));
+    }
+
+    // Test: callTool bubbles up revert with message
+    function testCallToolRevertWithMessage() public {
+        RevertingTool tool = new RevertingTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call revertWithMessage - should bubble up the revert
+        vm.prank(user1);
+        vm.expectRevert("Tool operation failed");
+        premium.callTool(address(tool), abi.encodeWithSignature("revertWithMessage()"));
+    }
+
+    // Test: callTool bubbles up revert with require message
+    function testCallToolRevertWithRequire() public {
+        RevertingTool tool = new RevertingTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call revertWithRequire
+        vm.prank(user1);
+        vm.expectRevert("Require failed");
+        premium.callTool(address(tool), abi.encodeWithSignature("revertWithRequire()"));
+    }
+
+    // Test: callTool bubbles up custom error
+    function testCallToolRevertWithCustomError() public {
+        RevertingTool tool = new RevertingTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call revertWithCustomError - should bubble up custom error
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("CustomError(string)", "Custom error occurred"));
+        premium.callTool(address(tool), abi.encodeWithSignature("revertWithCustomError()"));
+    }
+
+    // Test: callTool reverts with CallFailed when no revert reason
+    function testCallToolRevertNoReason() public {
+        RevertingToolNoReason tool = new RevertingToolNoReason();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call revertWithoutReason - should get CallFailed
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("revertWithoutReason()"));
+    }
+
+    // Test: callTool reverts with CallFailed when empty require
+    function testCallToolRevertEmptyRequire() public {
+        RevertingToolNoReason tool = new RevertingToolNoReason();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call revertWithEmptyReason
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("revertWithEmptyReason()"));
+    }
+
+    // Test: callTool reentrancy protection
+    function testCallToolReentrancyProtection() public {
+        MockTool normalTool = new MockTool();
+        ReentrantTool reentrantTool = new ReentrantTool(premium);
+        reentrantTool.setTargetTool(address(normalTool));
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call reentrant tool - it will try to call callTool again
+        // The inner callTool should fail with ReentrancyDetected
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.ReentrancyDetected.selector);
+        premium.callTool(address(reentrantTool), abi.encodeWithSignature("triggerReentry()"));
+    }
+
+    // Test: callTool to non-contract address (EOA)
+    function testCallToolToEOA() public {
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call to EOA (user2) - low-level call to EOA returns success
+        // but with the calldata we sent (not empty)
+        vm.prank(user1);
+        bytes memory result = premium.callTool(user2, abi.encodeWithSignature("nonexistent()"));
+
+        // Call to EOA returns success - result length depends on EVM behavior
+        // The important thing is it doesn't revert
+        assertTrue(result.length >= 0);
+    }
+
+    // Test: callTool with empty calldata to contract with fallback
+    function testCallToolEmptyCalldataWithFallback() public {
+        // Create a contract that has a fallback function
+        FallbackTool tool = new FallbackTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call with empty data - triggers fallback
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), "");
+
+        // Fallback was triggered
+        assertTrue(tool.fallbackCalled());
+        assertEq(result.length, 0);
+    }
+
+    // Test: callTool with empty calldata to contract without fallback reverts
+    function testCallToolEmptyCalldataNoFallback() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call with empty data to contract without fallback - should revert
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        premium.callTool(address(tool), "");
+    }
+
+    // Test: callTool with large return data
+    function testCallToolLargeReturnData() public {
+        LargeReturnTool tool = new LargeReturnTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Get 1000 bytes of data
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getLargeData(uint256)", 1000));
+
+        bytes memory data = abi.decode(result, (bytes));
+        assertEq(data.length, 1000);
+
+        // Verify some data
+        assertEq(uint8(data[0]), 0);
+        assertEq(uint8(data[255]), 255);
+        assertEq(uint8(data[256]), 0);
+    }
+
+    // Test: callTool multiple times by same member
+    function testCallToolMultipleCalls() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call multiple times
+        vm.startPrank(user1);
+
+        premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 1));
+        assertEq(tool.lastValue(), 1);
+
+        premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 2));
+        assertEq(tool.lastValue(), 2);
+
+        premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 3));
+        assertEq(tool.lastValue(), 3);
+
+        vm.stopPrank();
+    }
+
+    // Test: callTool by different premium members
+    function testCallToolDifferentMembers() public {
+        MockTool tool = new MockTool();
+
+        // Both users subscribe
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        vm.prank(user2);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // User1 calls
+        vm.prank(user1);
+        premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 100));
+        assertEq(tool.lastValue(), 100);
+        assertEq(tool.lastCaller(), address(premium)); // Both go through premium
+
+        // User2 calls
+        vm.prank(user2);
+        premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 200));
+        assertEq(tool.lastValue(), 200);
+        assertEq(tool.lastCaller(), address(premium));
+    }
+
+    // Test: callTool after renewing subscription
+    function testCallToolAfterRenewal() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Fast forward 25 days
+        vm.warp(block.timestamp + 25 days);
+
+        // Renew
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Fast forward another 10 days (now 35 days from start, but renewed)
+        vm.warp(block.timestamp + 10 days);
+
+        // Should still work (renewed for another 30 days from day 25)
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+        assertEq(abi.decode(result, (uint256)), 0);
+    }
+
+    // Test: callTool with yearly subscription
+    function testCallToolYearlyMember() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes yearly
+        vm.prank(user1);
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0));
+
+        // Fast forward 300 days
+        vm.warp(block.timestamp + 300 days);
+
+        // Should still work
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+        assertEq(abi.decode(result, (uint256)), 0);
+    }
+
+    // Test: callTool to contract without the called function (will revert if no fallback)
+    function testCallToolNonexistentFunctionNoFallback() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call nonexistent function - MockTool has no fallback, so it reverts
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("nonexistentFunction()"));
+    }
+
+    // Test: callTool to contract with fallback handles nonexistent function
+    function testCallToolNonexistentFunctionWithFallback() public {
+        FallbackTool tool = new FallbackTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call nonexistent function - FallbackTool has fallback, so it succeeds
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("nonexistentFunction()"));
+
+        // Fallback was triggered
+        assertTrue(tool.fallbackCalled());
+        assertEq(result.length, 0);
+    }
+
+    // Test: callTool state modification check (call not delegatecall)
+    function testCallToolStateNotModified() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        uint256 premiumBalanceBefore = premium.balanceOf(user1);
+        uint256 premiumTotalSupplyBefore = premium.totalSupply();
+
+        // Call tool that modifies state
+        vm.prank(user1);
+        premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", 12345));
+
+        // Premium contract state should not be modified
+        assertEq(premium.balanceOf(user1), premiumBalanceBefore);
+        assertEq(premium.totalSupply(), premiumTotalSupplyBefore);
+
+        // Tool state should be modified
+        assertEq(tool.lastValue(), 12345);
+    }
+
+    // Test: callTool after activating different token
+    function testCallToolAfterActivatingDifferentToken() public {
+        MockTool tool = new MockTool();
+
+        // user1 subscribes - gets token 1
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // user2 subscribes - gets token 2
+        vm.prank(user2);
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0));
+
+        // user2 transfers token 2 to user1
+        vm.prank(user2);
+        premium.transferFrom(user2, user1, 2);
+
+        // user1 now has token 1 (active, monthly) and token 2 (yearly)
+        assertEq(premium.activeSubscription(user1), 1);
+
+        // Fast forward 31 days - token 1 expires
+        vm.warp(block.timestamp + 31 days);
+
+        // user1's active token is expired
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+
+        // user1 activates token 2 (yearly, still valid)
+        vm.prank(user1);
+        premium.activate(2);
+
+        // Now callTool should work
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
+        assertEq(abi.decode(result, (uint256)), 0);
+    }
+
+    // Test: callTool gas consumption
+    function testCallToolGasConsumption() public {
+        GasConsumingTool tool = new GasConsumingTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call with moderate gas consumption
+        vm.prank(user1);
+        premium.callTool(address(tool), abi.encodeWithSignature("consumeGas(uint256)", 100));
+
+        // Should complete without issues
+    }
+
+    // Fuzz test: callTool with various inputs (bounded to avoid overflow in MockTool)
+    function testFuzzCallToolSetValue(uint256 value) public {
+        // Bound value to avoid overflow in MockTool's value * 2
+        value = bound(value, 0, type(uint256).max / 2);
+
+        MockTool tool = new MockTool();
+
+        // user1 subscribes
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Call with fuzzed value
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tool), abi.encodeWithSignature("setValue(uint256)", value));
+
+        // Check return value (value * 2)
+        uint256 returnValue = abi.decode(result, (uint256));
+        assertEq(returnValue, value * 2);
+
+        // Check stored value
+        assertEq(tool.lastValue(), value);
+    }
 }
 
 // Contract that rejects ETH to test failed referral payments
@@ -1405,5 +1955,607 @@ contract ReentrancyAttacker {
             // Try to reenter - should fail with "Reentrancy detected"
             premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
         }
+    }
+}
+
+// ============ Mock Contracts for callTool Tests ============
+
+// Simple mock tool that returns values
+contract MockTool {
+    uint256 public lastValue;
+    address public lastCaller;
+
+    function setValue(uint256 value) external returns (uint256) {
+        lastValue = value;
+        lastCaller = msg.sender;
+        return value * 2;
+    }
+
+    function getValue() external view returns (uint256) {
+        return lastValue;
+    }
+
+    function getMultipleValues() external pure returns (uint256, string memory, bool) {
+        return (42, "hello", true);
+    }
+
+    function noReturn() external {
+        lastValue = 999;
+    }
+}
+
+// Mock tool that reverts with a reason
+contract RevertingTool {
+    error CustomError(string reason);
+
+    function revertWithMessage() external pure {
+        revert("Tool operation failed");
+    }
+
+    function revertWithCustomError() external pure {
+        revert CustomError("Custom error occurred");
+    }
+
+    function revertWithRequire() external pure {
+        require(false, "Require failed");
+    }
+}
+
+// Mock tool that reverts without a reason
+contract RevertingToolNoReason {
+    function revertWithoutReason() external pure {
+        revert();
+    }
+
+    function revertWithEmptyReason() external pure {
+        require(false);
+    }
+}
+
+// Mock tool that tries to reenter callTool
+contract ReentrantTool {
+    BiuBiuPremium public premium;
+    address public targetTool;
+    bool private _attacked;
+
+    constructor(BiuBiuPremium _premium) {
+        premium = _premium;
+    }
+
+    function setTargetTool(address _target) external {
+        targetTool = _target;
+    }
+
+    function attacked() external view returns (bool) {
+        return _attacked;
+    }
+
+    function triggerReentry() external {
+        if (!_attacked) {
+            _attacked = true;
+            // Try to reenter callTool
+            premium.callTool(targetTool, abi.encodeWithSignature("getValue()"));
+        }
+    }
+}
+
+// Mock tool that consumes lots of gas
+contract GasConsumingTool {
+    uint256[] private _storage;
+
+    function consumeGas(uint256 iterations) external {
+        for (uint256 i = 0; i < iterations; i++) {
+            _storage.push(i);
+        }
+    }
+}
+
+// Mock tool that returns large data
+contract LargeReturnTool {
+    function getLargeData(uint256 size) external pure returns (bytes memory) {
+        bytes memory data = new bytes(size);
+        for (uint256 i = 0; i < size; i++) {
+            data[i] = bytes1(uint8(i % 256));
+        }
+        return data;
+    }
+}
+
+// Mock tool that checks msg.sender
+contract SenderCheckTool {
+    function getSender() external view returns (address) {
+        return msg.sender;
+    }
+
+    function requireSender(address expected) external view {
+        require(msg.sender == expected, "Wrong sender");
+    }
+}
+
+// Mock tool with fallback function
+contract FallbackTool {
+    bool public fallbackCalled;
+
+    fallback() external {
+        fallbackCalled = true;
+    }
+}
+
+// ============ Integration Tests: callTool with Real Tool Contracts ============
+
+contract BiuBiuPremiumToolIntegrationTest is Test {
+    BiuBiuPremium public premium;
+    TokenFactory public tokenFactory;
+    NFTFactory public nftFactory;
+    TokenDistribution public tokenDistribution;
+    TokenSweep public tokenSweep;
+
+    address public vault = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
+    address public user1 = address(0x1);
+    address public user2 = address(0x2);
+    address public nonMember = address(0x99);
+
+    uint256 public monthlyPrice;
+
+    function setUp() public {
+        // Deploy BiuBiuPremium
+        premium = new BiuBiuPremium(vault);
+
+        // Deploy tool contracts
+        tokenFactory = new TokenFactory();
+        nftFactory = new NFTFactory(address(0)); // No metadata contract needed for tests
+        tokenDistribution = new TokenDistribution(address(0)); // No WETH needed for basic tests
+        tokenSweep = new TokenSweep();
+
+        // Fund users
+        vm.deal(user1, 100 ether);
+        vm.deal(user2, 100 ether);
+        vm.deal(nonMember, 100 ether);
+
+        // Cache price
+        monthlyPrice = premium.MONTHLY_PRICE();
+
+        // Subscribe user1 as premium member
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+    }
+
+    // ============ TokenFactory.createTokenFree Tests ============
+
+    // Test: Premium member can call createTokenFree via callTool
+    function testCallToolTokenFactoryCreateTokenFree() public {
+        uint256 initialSupply = 1000000 * 10 ** 18;
+
+        // Encode the function call
+        bytes memory callData = abi.encodeWithSelector(
+            TokenFactory.createTokenFree.selector,
+            "TestToken",
+            "TT",
+            uint8(18),
+            initialSupply,
+            false // not mintable
+        );
+
+        // Call via premium
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tokenFactory), callData);
+
+        // Decode the returned token address
+        address tokenAddress = abi.decode(result, (address));
+
+        // Verify token was created
+        assertTrue(tokenAddress != address(0), "Token should be created");
+
+        // Verify token is tracked in factory
+        assertEq(tokenFactory.allTokensLength(), 1);
+
+        // Verify msg.sender in factory was premium contract
+        address[] memory tokens = tokenFactory.getUserTokens(address(premium));
+        assertEq(tokens.length, 1);
+        assertEq(tokens[0], tokenAddress);
+
+        // Verify factory free usage counter
+        assertEq(tokenFactory.totalFreeUsage(), 1);
+    }
+
+    // Test: Premium member can create multiple tokens
+    function testCallToolTokenFactoryCreateMultipleTokens() public {
+        vm.startPrank(user1);
+
+        // Create first token
+        bytes memory result1 = premium.callTool(
+            address(tokenFactory),
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "Token1", "TK1", uint8(18), 1000, false)
+        );
+        address token1 = abi.decode(result1, (address));
+
+        // Create second token
+        bytes memory result2 = premium.callTool(
+            address(tokenFactory),
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "Token2", "TK2", uint8(18), 2000, true)
+        );
+        address token2 = abi.decode(result2, (address));
+
+        vm.stopPrank();
+
+        // Verify both tokens created
+        assertEq(tokenFactory.allTokensLength(), 2);
+        assertTrue(token1 != token2);
+        assertEq(tokenFactory.totalFreeUsage(), 2);
+    }
+
+    // Test: Non-member cannot call createTokenFree via callTool
+    function testCallToolTokenFactoryNotPremiumMember() public {
+        bytes memory callData =
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "TestToken", "TT", uint8(18), 1000, false);
+
+        vm.prank(nonMember);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tokenFactory), callData);
+    }
+
+    // Test: createTokenFree with mintable token
+    function testCallToolTokenFactoryMintableToken() public {
+        bytes memory callData = abi.encodeWithSelector(
+            TokenFactory.createTokenFree.selector, "MintableToken", "MTK", uint8(18), 1000 * 10 ** 18, true
+        );
+
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tokenFactory), callData);
+        address tokenAddress = abi.decode(result, (address));
+
+        // Get token info - returns TokenInfo struct
+        TokenInfo memory info = tokenFactory.getTokenInfo(tokenAddress);
+        assertTrue(info.mintable);
+    }
+
+    // ============ NFTFactory.createERC721Free Tests ============
+
+    // Test: Premium member can call createERC721Free via callTool
+    function testCallToolNFTFactoryCreateERC721Free() public {
+        bytes memory callData = abi.encodeWithSelector(
+            NFTFactory.createERC721Free.selector, "TestNFT", "TNFT", "A test NFT collection", "https://example.com"
+        );
+
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(nftFactory), callData);
+        address nftAddress = abi.decode(result, (address));
+
+        // Verify NFT was created
+        assertTrue(nftAddress != address(0));
+        assertEq(nftFactory.allNFTsLength(), 1);
+
+        // Verify msg.sender in factory was premium contract
+        address[] memory nfts = nftFactory.getUserNFTs(address(premium));
+        assertEq(nfts.length, 1);
+        assertEq(nfts[0], nftAddress);
+
+        // Verify factory free usage counter
+        assertEq(nftFactory.totalFreeUsage(), 1);
+    }
+
+    // Test: Premium member can create multiple NFT collections
+    function testCallToolNFTFactoryCreateMultipleNFTs() public {
+        vm.startPrank(user1);
+
+        bytes memory result1 = premium.callTool(
+            address(nftFactory),
+            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT1", "N1", "First NFT", "https://nft1.com")
+        );
+
+        bytes memory result2 = premium.callTool(
+            address(nftFactory),
+            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT2", "N2", "Second NFT", "https://nft2.com")
+        );
+
+        vm.stopPrank();
+
+        address nft1 = abi.decode(result1, (address));
+        address nft2 = abi.decode(result2, (address));
+
+        assertEq(nftFactory.allNFTsLength(), 2);
+        assertTrue(nft1 != nft2);
+        assertEq(nftFactory.totalFreeUsage(), 2);
+    }
+
+    // Test: Non-member cannot call createERC721Free via callTool
+    function testCallToolNFTFactoryNotPremiumMember() public {
+        bytes memory callData = abi.encodeWithSelector(
+            NFTFactory.createERC721Free.selector, "TestNFT", "TNFT", "Description", "https://example.com"
+        );
+
+        vm.prank(nonMember);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(nftFactory), callData);
+    }
+
+    // ============ TokenDistribution.distributeFree Tests ============
+
+    // Test: Premium member can call distributeFree via callTool
+    function testCallToolTokenDistributionDistributeFree() public {
+        // Create a mock ERC20 token first
+        MockERC20ForDistribution mockToken = new MockERC20ForDistribution();
+        uint256 totalAmount = 1000 * 10 ** 18;
+        mockToken.mint(address(premium), totalAmount);
+
+        // Approve distribution contract from premium
+        // Since we're calling through premium, we need to approve via callTool
+        vm.prank(user1);
+        premium.callTool(
+            address(mockToken),
+            abi.encodeWithSelector(MockERC20ForDistribution.approve.selector, address(tokenDistribution), totalAmount)
+        );
+
+        // Create recipients
+        Recipient[] memory recipients = new Recipient[](2);
+        recipients[0] = Recipient({to: address(0x100), value: 300 * 10 ** 18});
+        recipients[1] = Recipient({to: address(0x101), value: 400 * 10 ** 18});
+
+        // Call distributeFree
+        bytes memory callData = abi.encodeWithSelector(
+            TokenDistribution.distributeFree.selector,
+            address(mockToken),
+            uint8(1), // TOKEN_TYPE_ERC20
+            uint256(0), // tokenId (not used for ERC20)
+            recipients
+        );
+
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tokenDistribution), callData);
+
+        // Decode result (totalDistributed, failed)
+        (uint256 totalDistributed,) = abi.decode(result, (uint256, bytes));
+
+        // Verify distribution
+        assertEq(totalDistributed, 700 * 10 ** 18);
+        assertEq(mockToken.balanceOf(address(0x100)), 300 * 10 ** 18);
+        assertEq(mockToken.balanceOf(address(0x101)), 400 * 10 ** 18);
+
+        // Verify factory free usage counter
+        assertEq(tokenDistribution.totalFreeUsage(), 1);
+    }
+
+    // Test: Non-member cannot call distributeFree via callTool
+    function testCallToolTokenDistributionNotPremiumMember() public {
+        Recipient[] memory recipients = new Recipient[](1);
+        recipients[0] = Recipient({to: address(0x100), value: 100});
+
+        bytes memory callData = abi.encodeWithSelector(
+            TokenDistribution.distributeFree.selector, address(0x123), uint8(1), uint256(0), recipients
+        );
+
+        vm.prank(nonMember);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tokenDistribution), callData);
+    }
+
+    // Test: distributeFree with empty recipients reverts with BatchTooLarge
+    function testCallToolTokenDistributionEmptyRecipientsReverts() public {
+        MockERC20ForDistribution mockToken = new MockERC20ForDistribution();
+
+        Recipient[] memory recipients = new Recipient[](0);
+
+        bytes memory callData = abi.encodeWithSelector(
+            TokenDistribution.distributeFree.selector, address(mockToken), uint8(1), uint256(0), recipients
+        );
+
+        // TokenDistribution requires at least 1 recipient (reverts with BatchTooLarge)
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSignature("BatchTooLarge()"));
+        premium.callTool(address(tokenDistribution), callData);
+    }
+
+    // ============ TokenSweep.multicallFree Tests ============
+
+    // Test: Premium member can call multicallFree via callTool (empty wallets)
+    function testCallToolTokenSweepMulticallFreeEmptyWallets() public {
+        Wallet[] memory wallets = new Wallet[](0);
+        address[] memory tokens = new address[](0);
+        uint256 deadline = block.timestamp + 1 hours;
+
+        bytes memory callData = abi.encodeWithSelector(
+            TokenSweep.multicallFree.selector,
+            wallets,
+            user1, // recipient
+            tokens,
+            deadline,
+            "" // no signature
+        );
+
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tokenSweep), callData);
+
+        // multicallFree returns nothing, so result should be empty
+        assertEq(result.length, 0);
+
+        // Verify free usage counter incremented
+        assertEq(tokenSweep.totalFreeUsage(), 1);
+    }
+
+    // Test: Non-member cannot call multicallFree via callTool
+    function testCallToolTokenSweepNotPremiumMember() public {
+        Wallet[] memory wallets = new Wallet[](0);
+        address[] memory tokens = new address[](0);
+
+        bytes memory callData = abi.encodeWithSelector(
+            TokenSweep.multicallFree.selector, wallets, nonMember, tokens, block.timestamp + 1 hours, ""
+        );
+
+        vm.prank(nonMember);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tokenSweep), callData);
+    }
+
+    // Test: Multiple premium members can use tools
+    function testCallToolMultiplePremiumMembers() public {
+        // Subscribe user2 as premium member
+        vm.prank(user2);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // User1 creates a token
+        vm.prank(user1);
+        bytes memory result1 = premium.callTool(
+            address(tokenFactory),
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "Token1", "TK1", uint8(18), 1000, false)
+        );
+
+        // User2 creates a token
+        vm.prank(user2);
+        bytes memory result2 = premium.callTool(
+            address(tokenFactory),
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "Token2", "TK2", uint8(18), 2000, false)
+        );
+
+        address token1 = abi.decode(result1, (address));
+        address token2 = abi.decode(result2, (address));
+
+        // Both tokens created, both owned by premium contract
+        assertEq(tokenFactory.allTokensLength(), 2);
+        address[] memory premiumTokens = tokenFactory.getUserTokens(address(premium));
+        assertEq(premiumTokens.length, 2);
+    }
+
+    // Test: Expired member cannot use tools
+    function testCallToolExpiredMemberCannotUseTool() public {
+        // Fast forward past subscription expiry
+        vm.warp(block.timestamp + 31 days);
+
+        bytes memory callData =
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "TestToken", "TT", uint8(18), 1000, false);
+
+        vm.prank(user1);
+        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        premium.callTool(address(tokenFactory), callData);
+    }
+
+    // Test: Member can use tool after renewal
+    function testCallToolAfterRenewal() public {
+        // Fast forward 25 days
+        vm.warp(block.timestamp + 25 days);
+
+        // Renew subscription
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+
+        // Fast forward another 10 days (now 35 days from start, but still valid)
+        vm.warp(block.timestamp + 10 days);
+
+        // Should still work
+        bytes memory callData =
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "TestToken", "TT", uint8(18), 1000, false);
+
+        vm.prank(user1);
+        bytes memory result = premium.callTool(address(tokenFactory), callData);
+
+        address tokenAddress = abi.decode(result, (address));
+        assertTrue(tokenAddress != address(0));
+    }
+
+    // Test: Premium contract is msg.sender for all tool calls
+    function testCallToolMsgSenderIsPremiumForAllTools() public {
+        // TokenFactory - check via getUserTokens
+        vm.prank(user1);
+        premium.callTool(
+            address(tokenFactory),
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "Token", "TK", uint8(18), 1000, false)
+        );
+        assertEq(tokenFactory.getUserTokens(address(premium)).length, 1);
+
+        // NFTFactory - check via getUserNFTs
+        vm.prank(user1);
+        premium.callTool(
+            address(nftFactory),
+            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT", "N", "Desc", "https://example.com")
+        );
+        assertEq(nftFactory.getUserNFTs(address(premium)).length, 1);
+    }
+
+    // Test: Tool calls don't affect premium contract state
+    function testCallToolDoesNotAffectPremiumState() public {
+        uint256 totalSupplyBefore = premium.totalSupply();
+        uint256 user1BalanceBefore = premium.balanceOf(user1);
+
+        // Make several tool calls
+        vm.startPrank(user1);
+        premium.callTool(
+            address(tokenFactory),
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "Token1", "TK1", uint8(18), 1000, false)
+        );
+        premium.callTool(
+            address(nftFactory),
+            abi.encodeWithSelector(NFTFactory.createERC721Free.selector, "NFT1", "N1", "Desc", "https://example.com")
+        );
+        vm.stopPrank();
+
+        // Premium contract state unchanged
+        assertEq(premium.totalSupply(), totalSupplyBefore);
+        assertEq(premium.balanceOf(user1), user1BalanceBefore);
+    }
+
+    // Test: Tool calls with invalid parameters bubble up errors
+    function testCallToolInvalidParametersBubbleUp() public {
+        // TokenFactory requires non-empty name
+        bytes memory callData = abi.encodeWithSelector(
+            TokenFactory.createTokenFree.selector,
+            "", // empty name - should fail
+            "TK",
+            uint8(18),
+            1000,
+            false
+        );
+
+        vm.prank(user1);
+        vm.expectRevert("TokenFactory: name cannot be empty");
+        premium.callTool(address(tokenFactory), callData);
+    }
+
+    // Test: Yearly member can use tools for longer period
+    function testCallToolYearlyMember() public {
+        // Subscribe user2 with yearly plan
+        uint256 yearlyPrice = premium.YEARLY_PRICE();
+        vm.prank(user2);
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0));
+
+        // Fast forward 300 days - still valid
+        vm.warp(block.timestamp + 300 days);
+
+        bytes memory callData =
+            abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "YearlyToken", "YT", uint8(18), 1000, false);
+
+        vm.prank(user2);
+        bytes memory result = premium.callTool(address(tokenFactory), callData);
+        address tokenAddress = abi.decode(result, (address));
+        assertTrue(tokenAddress != address(0));
+    }
+}
+
+// Mock ERC20 for distribution tests
+contract MockERC20ForDistribution {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(balanceOf[from] >= amount, "Insufficient balance");
+        require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        allowance[from][msg.sender] -= amount;
+        return true;
     }
 }

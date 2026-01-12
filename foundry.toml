@@ -3,4 +3,7 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+# Allow writing SVG preview files
+fs_permissions = [{ access = "read-write", path = "./svg-preview" }]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
