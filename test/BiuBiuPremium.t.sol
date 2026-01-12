@@ -441,18 +441,6 @@ contract BiuBiuPremiumTest is Test {
         assertEq(renewalCount, 1); // First subscribe counts as 1 renewal
     }
 
-    // Test getTokenLockedPrices - locked prices saved at mint time
-    function testGetTokenLockedPrices() public {
-        // Subscribe at current prices
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Check locked prices match current prices at mint time
-        (uint256 lockedMonthly, uint256 lockedYearly) = premium.getTokenLockedPrices(1);
-        assertEq(lockedMonthly, monthlyPrice);
-        assertEq(lockedYearly, yearlyPrice);
-    }
-
     // Test getTokenAttributes - renewal count increments
     function testGetTokenAttributesRenewalCount() public {
         vm.startPrank(user1);
@@ -754,14 +742,6 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.getApproved(1), address(0));
     }
 
-    // ============ Locked Prices Edge Cases ============
-
-    // Test getTokenLockedPrices for non-existent token
-    function testGetTokenLockedPricesNotExists() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
-        premium.getTokenLockedPrices(999);
-    }
-
     // ============ Security & Edge Case Tests ============
 
     // Test: activeSubscription pointing to non-owned token after transfer
@@ -1054,12 +1034,6 @@ contract BiuBiuPremiumTest is Test {
         premium.getTokenAttributes(0);
     }
 
-    // Test: Token locked prices for tokenId 0 (should revert)
-    function testGetTokenLockedPricesTokenZero() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
-        premium.getTokenLockedPrices(0);
-    }
-
     // Test: subscribeToToken with tokenId 0 (should revert)
     function testSubscribeToTokenZero() public {
         vm.prank(user1);
@@ -1169,26 +1143,6 @@ contract BiuBiuPremiumTest is Test {
 
         // Contract still has the funds (vault rejected)
         assertEq(address(premiumWithRejectingVault).balance, price);
-    }
-
-    // Test: Renewal count doesn't affect locked prices
-    function testRenewalCountDoesNotAffectLockedPrices() public {
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        (uint256 lockedMonthly1, uint256 lockedYearly1) = premium.getTokenLockedPrices(1);
-
-        // Renew multiple times
-        for (uint256 i = 0; i < 5; i++) {
-            vm.prank(user1);
-            premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-        }
-
-        (uint256 lockedMonthly2, uint256 lockedYearly2) = premium.getTokenLockedPrices(1);
-
-        // Locked prices unchanged
-        assertEq(lockedMonthly1, lockedMonthly2);
-        assertEq(lockedYearly1, lockedYearly2);
     }
 
     // ============ Additional Edge Case Tests ============

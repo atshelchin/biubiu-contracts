@@ -83,9 +83,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
         uint256 mintedAt; // First mint timestamp
         address mintedBy; // Who minted this token
         uint256 renewalCount; // Number of renewals
-        // Locked prices at mint time (for discounted renewals)
-        uint256 lockedMonthlyPrice;
-        uint256 lockedYearlyPrice;
     }
 
     // tokenId => subscription expiry time
@@ -214,10 +211,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
                 _toString(attrs.renewalCount),
                 '},{"trait_type":"Expiry","display_type":"date","value":',
                 _toString(expiry),
-                '},{"trait_type":"Locked Monthly Price","display_type":"number","value":',
-                _toString(attrs.lockedMonthlyPrice),
-                '},{"trait_type":"Locked Yearly Price","display_type":"number","value":',
-                _toString(attrs.lockedYearlyPrice),
                 "}]}"
             )
         );
@@ -266,14 +259,8 @@ contract BiuBiuPremium is IBiuBiuPremium {
             emit Activated(to, tokenId);
         }
 
-        // Initialize token attributes with locked prices at mint time
-        _tokenAttributes[tokenId] = TokenAttributes({
-            mintedAt: block.timestamp,
-            mintedBy: msg.sender,
-            renewalCount: 0,
-            lockedMonthlyPrice: MONTHLY_PRICE(),
-            lockedYearlyPrice: YEARLY_PRICE()
-        });
+        // Initialize token attributes
+        _tokenAttributes[tokenId] = TokenAttributes({mintedAt: block.timestamp, mintedBy: msg.sender, renewalCount: 0});
 
         unchecked {
             _balances[to] += 1;
@@ -356,8 +343,8 @@ contract BiuBiuPremium is IBiuBiuPremium {
         // Defense in depth: ensure token exists (callers should already validate)
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
 
-        // Get price and duration based on tier (uses locked prices from mint time)
-        (uint256 price, uint256 duration) = _getLockedTierInfo(tokenId, tier);
+        // Get price and duration based on tier
+        (uint256 price, uint256 duration) = _getTierInfo(tier);
 
         // Validate payment
         if (msg.value != price) revert IncorrectPaymentAmount();
@@ -406,23 +393,16 @@ contract BiuBiuPremium is IBiuBiuPremium {
     }
 
     /**
-     * @notice Get tier pricing using locked prices from token mint time
-     * @dev NFT holders renew at the price locked when the NFT was minted
-     * @param tokenId The token to get locked prices for
+     * @notice Get tier pricing and duration
      * @param tier The subscription tier
-     * @return price The locked price in wei
+     * @return price The price in wei
      * @return duration The duration in seconds
      */
-    function _getLockedTierInfo(uint256 tokenId, SubscriptionTier tier)
-        private
-        view
-        returns (uint256 price, uint256 duration)
-    {
-        TokenAttributes storage attrs = _tokenAttributes[tokenId];
+    function _getTierInfo(SubscriptionTier tier) private pure returns (uint256 price, uint256 duration) {
         if (tier == SubscriptionTier.Monthly) {
-            return (attrs.lockedMonthlyPrice, MONTHLY_DURATION);
+            return (MONTHLY_PRICE(), MONTHLY_DURATION);
         } else {
-            return (attrs.lockedYearlyPrice, YEARLY_DURATION);
+            return (YEARLY_PRICE(), YEARLY_DURATION);
         }
     }
 
@@ -480,23 +460,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
         TokenAttributes storage attrs = _tokenAttributes[tokenId];
         return (attrs.mintedAt, attrs.mintedBy, attrs.renewalCount);
-    }
-
-    /**
-     * @notice Get locked prices for a token (prices at mint time)
-     * @dev These are the prices that will be used for renewals
-     * @param tokenId The token to query
-     * @return lockedMonthlyPrice The locked monthly subscription price
-     * @return lockedYearlyPrice The locked yearly subscription price
-     */
-    function getTokenLockedPrices(uint256 tokenId)
-        external
-        view
-        returns (uint256 lockedMonthlyPrice, uint256 lockedYearlyPrice)
-    {
-        if (_owners[tokenId] == address(0)) revert TokenNotExists();
-        TokenAttributes storage attrs = _tokenAttributes[tokenId];
-        return (attrs.lockedMonthlyPrice, attrs.lockedYearlyPrice);
     }
 
     /**

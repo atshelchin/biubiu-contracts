@@ -80,11 +80,6 @@ interface IBiuBiuPremium {
         view
         returns (uint256 mintedAt, address mintedBy, uint256 renewalCount);
 
-    function getTokenLockedPrices(uint256 tokenId)
-        external
-        view
-        returns (uint256 lockedMonthlyPrice, uint256 lockedYearlyPrice);
-
     function nextTokenId() external view returns (uint256);
     function subscriptionExpiry(uint256 tokenId) external view returns (uint256);
     function activeSubscription(address user) external view returns (uint256);
