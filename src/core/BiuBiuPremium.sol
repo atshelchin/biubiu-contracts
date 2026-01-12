@@ -19,7 +19,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
     error InvalidAddress();
     error NotApproved();
     error TransferToNonReceiver();
-    error NotAdmin();
 
     // Reentrancy guard
     uint256 private _locked = 1;
@@ -38,8 +37,8 @@ contract BiuBiuPremium is IBiuBiuPremium {
     mapping(uint256 => address) private _tokenApprovals;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-    // Base fee (mutable by admin) - all prices derived from this
-    uint256 public NON_MEMBER_FEE = 0.01 ether;
+    // Base fee (constant) - all prices derived from this
+    uint256 public constant NON_MEMBER_FEE = 0.01 ether;
 
     // Price multipliers (constant)
     // Monthly = NON_MEMBER_FEE * 12
@@ -51,19 +50,11 @@ contract BiuBiuPremium is IBiuBiuPremium {
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
 
-    // Admin address (can update prices)
-    address public constant admin = 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9;
-
     // Vault address for revenue distribution (set via constructor)
     address public immutable VAULT;
 
     constructor(address _vault) {
         VAULT = _vault;
-    }
-
-    modifier onlyAdmin() {
-        if (msg.sender != admin) revert NotAdmin();
-        _;
     }
 
     // ============ Price Getters ============
@@ -72,7 +63,7 @@ contract BiuBiuPremium is IBiuBiuPremium {
      * @notice Get current monthly subscription price
      * @return Monthly price (NON_MEMBER_FEE * 12)
      */
-    function MONTHLY_PRICE() public view returns (uint256) {
+    function MONTHLY_PRICE() public pure returns (uint256) {
         return NON_MEMBER_FEE * MONTHLY_MULTIPLIER;
     }
 
@@ -80,19 +71,8 @@ contract BiuBiuPremium is IBiuBiuPremium {
      * @notice Get current yearly subscription price
      * @return Yearly price (NON_MEMBER_FEE * 60, Monthly * 5)
      */
-    function YEARLY_PRICE() public view returns (uint256) {
+    function YEARLY_PRICE() public pure returns (uint256) {
         return NON_MEMBER_FEE * YEARLY_MULTIPLIER;
-    }
-
-    // ============ Admin Functions ============
-
-    /**
-     * @notice Update base fee (affects all derived prices)
-     * @param fee New base fee
-     */
-    function setNonMemberFee(uint256 fee) external onlyAdmin {
-        NON_MEMBER_FEE = fee;
-        emit NonMemberFeeUpdated(fee);
     }
 
     // Token attributes struct

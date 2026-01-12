@@ -453,51 +453,6 @@ contract BiuBiuPremiumTest is Test {
         assertEq(lockedYearly, yearlyPrice);
     }
 
-    // Test locked prices - renewal uses locked price after price increase
-    function testRenewalUsesLockedPrice() public {
-        // Subscribe at current prices
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Admin increases prices via NON_MEMBER_FEE
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(0.1 ether); // Monthly = 1.2 ether, Yearly = 6 ether
-
-        // Verify prices increased
-        assertEq(premium.MONTHLY_PRICE(), 1.2 ether);
-
-        // User renews at OLD locked price, not new price
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Check subscription is active
-        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
-        assertTrue(isPremium);
-
-        // Verify locked prices unchanged
-        (uint256 lockedMonthly,) = premium.getTokenLockedPrices(1);
-        assertEq(lockedMonthly, monthlyPrice);
-    }
-
-    // Test new subscription uses current price after price increase
-    function testNewSubscriptionUsesCurrentPrice() public {
-        // Subscribe at current prices
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Admin increases prices via NON_MEMBER_FEE
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(0.1 ether); // Monthly = 1.2 ether, Yearly = 6 ether
-
-        // New user must pay NEW price
-        vm.prank(user2);
-        premium.subscribe{value: 1.2 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Check new user's locked price is the NEW price
-        (uint256 lockedMonthly,) = premium.getTokenLockedPrices(2);
-        assertEq(lockedMonthly, 1.2 ether);
-    }
-
     // Test getTokenAttributes - renewal count increments
     function testGetTokenAttributesRenewalCount() public {
         vm.startPrank(user1);
@@ -799,155 +754,12 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.getApproved(1), address(0));
     }
 
-    // ============ Admin Function Tests ============
-
-    // Test setNonMemberFee updates derived prices
-    function testSetNonMemberFeeUpdatesPrices() public {
-        uint256 newFee = 0.1 ether;
-
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(newFee);
-
-        // Monthly = newFee * 12 = 1.2 ether
-        // Yearly = newFee * 60 = 6 ether (Monthly * 5)
-        assertEq(premium.MONTHLY_PRICE(), 1.2 ether);
-        assertEq(premium.YEARLY_PRICE(), 6 ether);
-    }
-
-    // Test setNonMemberFee by admin
-    function testSetNonMemberFee() public {
-        uint256 newFee = 0.02 ether;
-
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(newFee);
-
-        assertEq(premium.NON_MEMBER_FEE(), newFee);
-    }
-
-    // Test setNonMemberFee emits event
-    function testSetNonMemberFeeEmitsEvent() public {
-        uint256 newFee = 0.02 ether;
-
-        vm.expectEmit(false, false, false, true);
-        emit IBiuBiuPremium.NonMemberFeeUpdated(newFee);
-
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(newFee);
-    }
-
-    // Test setNonMemberFee reverts for non-admin
-    function testSetNonMemberFeeNotAdmin() public {
-        vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotAdmin.selector);
-        premium.setNonMemberFee(0.02 ether);
-    }
-
-    // Test admin constant value
-    function testAdminAddress() public view {
-        assertEq(premium.admin(), 0xd9eDa338CafaE29b18b4a92aA5f7c646Ba9cDCe9);
-    }
-
     // ============ Locked Prices Edge Cases ============
-
-    // Test locked prices after transfer - new owner uses original prices
-    function testLockedPricesAfterTransfer() public {
-        // User1 mints at current prices
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Admin raises prices via NON_MEMBER_FEE
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 12 ether, Yearly = 60 ether
-
-        // Transfer NFT to user2
-        vm.prank(user1);
-        premium.transferFrom(user1, user2, 1);
-
-        // User2 activates the transferred NFT
-        vm.prank(user2);
-        premium.activate(1);
-
-        // User2 renews at OLD locked price (not new price)
-        vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Check subscription is active
-        (bool isPremium,,) = premium.getSubscriptionInfo(user2);
-        assertTrue(isPremium);
-    }
-
-    // Test subscribeToToken uses locked prices
-    function testSubscribeToTokenUsesLockedPrices() public {
-        // User1 mints at current prices
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Admin raises prices via NON_MEMBER_FEE
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 12 ether, Yearly = 60 ether
-
-        // Anyone can gift renewal using locked price
-        vm.prank(user2);
-        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Check renewal count increased
-        (,, uint256 renewalCount) = premium.getTokenAttributes(1);
-        assertEq(renewalCount, 2);
-    }
 
     // Test getTokenLockedPrices for non-existent token
     function testGetTokenLockedPricesNotExists() public {
         vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
         premium.getTokenLockedPrices(999);
-    }
-
-    // Test all tiers use locked prices for renewal
-    function testAllTiersUseLockedPrices() public {
-        // User1 mints at current prices
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Get locked prices
-        (uint256 lockedMonthly, uint256 lockedYearly) = premium.getTokenLockedPrices(1);
-
-        // Admin raises prices significantly via NON_MEMBER_FEE
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(10 ether); // Monthly = 120 ether, Yearly = 600 ether
-
-        // Renew with each tier at locked prices
-        vm.startPrank(user1);
-
-        // Daily renewal at locked price
-        premium.subscribe{value: lockedMonthly}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Monthly renewal at locked price
-        premium.subscribe{value: lockedMonthly}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Yearly renewal at locked price
-        premium.subscribe{value: lockedYearly}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0));
-
-        vm.stopPrank();
-
-        // Check renewal count
-        (,, uint256 renewalCount) = premium.getTokenAttributes(1);
-        assertEq(renewalCount, 4); // 1 initial + 3 renewals
-    }
-
-    // Test setNonMemberFee to zero - all prices become free
-    function testSetNonMemberFeeToZero() public {
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(0);
-
-        assertEq(premium.NON_MEMBER_FEE(), 0);
-        assertEq(premium.MONTHLY_PRICE(), 0);
-        assertEq(premium.YEARLY_PRICE(), 0);
-
-        // New subscription should be free
-        vm.prank(user1);
-        premium.subscribe{value: 0}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
-        assertTrue(isPremium);
     }
 
     // ============ Security & Edge Case Tests ============
@@ -1032,45 +844,6 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(user2);
         premium.activate(1);
         assertEq(premium.activeSubscription(user2), 1);
-    }
-
-    // Test: Subscription with zero value when price is zero
-    function testZeroPriceSubscription() public {
-        // Admin sets NON_MEMBER_FEE to zero - all prices become free
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(0);
-
-        // User can subscribe for free
-        vm.prank(user1);
-        premium.subscribe{value: 0}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
-        assertTrue(isPremium);
-
-        // Can also renew for free
-        vm.prank(user1);
-        premium.subscribe{value: 0}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        (,, uint256 renewalCount) = premium.getTokenAttributes(1);
-        assertEq(renewalCount, 2);
-    }
-
-    // Test: Zero price with referrer (no referral paid but should not revert)
-    function testZeroPriceWithReferrer() public {
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(0);
-
-        uint256 referrerBalanceBefore = referrer.balance;
-
-        vm.prank(user1);
-        premium.subscribe{value: 0}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer);
-
-        // Referrer balance unchanged (0 >> 1 = 0)
-        assertEq(referrer.balance, referrerBalanceBefore);
-
-        // Subscription still works
-        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
-        assertTrue(isPremium);
     }
 
     // Test: Referral payment to contract that reverts - subscription should succeed
@@ -1275,21 +1048,6 @@ contract BiuBiuPremiumTest is Test {
         premium.activate(1);
     }
 
-    // Test: Paying wrong amount for renewal with locked prices
-    function testWrongAmountWithLockedPrices() public {
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Admin increases prices via NON_MEMBER_FEE
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 12 ether, Yearly = 60 ether
-
-        // User tries to pay NEW price (12 ether) but locked price is monthlyPrice
-        vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.IncorrectPaymentAmount.selector);
-        premium.subscribe{value: 12 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-    }
-
     // Test: Token attributes for tokenId 0 (should revert)
     function testGetTokenAttributesTokenZero() public {
         vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
@@ -1431,25 +1189,6 @@ contract BiuBiuPremiumTest is Test {
         // Locked prices unchanged
         assertEq(lockedMonthly1, lockedMonthly2);
         assertEq(lockedYearly1, lockedYearly2);
-    }
-
-    // Test: Price changes don't affect existing token's locked prices
-    function testPriceChangesDoNotAffectExistingLockedPrices() public {
-        vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        (uint256 lockedMonthly1,) = premium.getTokenLockedPrices(1);
-
-        // Admin changes NON_MEMBER_FEE multiple times
-        vm.startPrank(premium.admin());
-        premium.setNonMemberFee(1 ether); // Monthly = 12 ether
-        premium.setNonMemberFee(0.001 ether); // Monthly = 0.012 ether
-        premium.setNonMemberFee(10 ether); // Monthly = 120 ether
-        vm.stopPrank();
-
-        // Token 1's locked price is still the original
-        (uint256 lockedMonthly2,) = premium.getTokenLockedPrices(1);
-        assertEq(lockedMonthly1, lockedMonthly2);
     }
 
     // ============ Additional Edge Case Tests ============
@@ -1660,24 +1399,6 @@ contract BiuBiuPremiumTest is Test {
         assertEq(expectedReferral, 0.06 ether);
     }
 
-    // Test: Referral with small wei amount
-    function testReferralWithMinimumAmount() public {
-        // Set NON_MEMBER_FEE to minimum
-        // Since Monthly = NON_MEMBER_FEE * 12, NON_MEMBER_FEE = 1 gives Monthly = 12 wei
-        vm.prank(premium.admin());
-        premium.setNonMemberFee(1); // Monthly = 12 wei, Yearly = 60 wei
-
-        uint256 referrerBalanceBefore = referrer.balance;
-        uint256 vaultBalanceBefore = vault.balance;
-
-        vm.prank(user1);
-        premium.subscribe{value: 12}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer);
-
-        // 12 >> 1 = 6, so referrer gets 6 wei
-        assertEq(referrer.balance, referrerBalanceBefore + 6);
-        // Vault gets remaining 6 wei
-        assertEq(vault.balance, vaultBalanceBefore + 6);
-    }
 }
 
 // Contract that rejects ETH to test failed referral payments
