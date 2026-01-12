@@ -2,23 +2,18 @@
 pragma solidity ^0.8.20;
 
 import {ChainedExecutor} from "./ChainedExecutor.sol";
+import {IChainedExecutorFactory} from "./IChainedExecutorFactory.sol";
 
 /// @title ChainedExecutorFactory
 /// @notice 使用 CREATE2 确定性部署 ChainedExecutor 智能合约账户
 /// @author BiuBiu
-contract ChainedExecutorFactory {
+contract ChainedExecutorFactory is IChainedExecutorFactory {
     /*//////////////////////////////////////////////////////////////
                                  STATE
     //////////////////////////////////////////////////////////////*/
 
     /// @notice ERC-4337 EntryPoint 地址
     address public immutable entryPoint;
-
-    /*//////////////////////////////////////////////////////////////
-                                 EVENTS
-    //////////////////////////////////////////////////////////////*/
-
-    event AccountCreated(address indexed account, address indexed owner, uint256 salt);
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
