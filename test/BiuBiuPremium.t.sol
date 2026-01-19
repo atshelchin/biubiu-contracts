@@ -26,7 +26,7 @@ contract BiuBiuPremiumTest is Test {
     uint256 public yearlyPrice;
 
     function setUp() public {
-        premium = new BiuBiuPremium(vault);
+        premium = new BiuBiuPremium();
         vm.deal(user1, 100 ether);
         vm.deal(user2, 100 ether);
 
@@ -167,7 +167,7 @@ contract BiuBiuPremiumTest is Test {
     function testIncorrectPaymentAmount() public {
         vm.startPrank(user1);
 
-        vm.expectRevert(BiuBiuPremium.IncorrectPaymentAmount.selector);
+        vm.expectRevert(IBiuBiuPremium.IncorrectPaymentAmount.selector);
         premium.subscribe{value: 0.005 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.stopPrank();
@@ -287,7 +287,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
         premium.activate(1);
     }
 
@@ -310,7 +310,7 @@ contract BiuBiuPremiumTest is Test {
     // Test subscribeToToken for non-existent token
     function testSubscribeToTokenNotExists() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(999, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
@@ -477,7 +477,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test getTokenAttributes for non-existent token
     function testGetTokenAttributesNotExists() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.getTokenAttributes(999);
     }
 
@@ -550,7 +550,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test getTokenSubscriptionInfo reverts for non-existent token
     function testGetTokenSubscriptionInfoNotExists() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.getTokenSubscriptionInfo(999);
     }
 
@@ -574,7 +574,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test tokenURI for non-existent token
     function testTokenURINotExists() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.tokenURI(999);
     }
 
@@ -596,19 +596,19 @@ contract BiuBiuPremiumTest is Test {
 
     // Test balanceOf with zero address reverts
     function testBalanceOfZeroAddress() public {
-        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
         premium.balanceOf(address(0));
     }
 
     // Test ownerOf for non-existent token
     function testOwnerOfNotExists() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.ownerOf(999);
     }
 
     // Test getApproved for non-existent token
     function testGetApprovedNotExists() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.getApproved(999);
     }
 
@@ -618,7 +618,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
         premium.approve(user1, 1);
     }
 
@@ -628,14 +628,14 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(BiuBiuPremium.NotApproved.selector);
+        vm.expectRevert(IBiuBiuPremium.NotApproved.selector);
         premium.approve(referrer, 1);
     }
 
     // Test setApprovalForAll to self reverts
     function testSetApprovalForAllToSelf() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
         premium.setApprovalForAll(user1, true);
     }
 
@@ -671,7 +671,7 @@ contract BiuBiuPremiumTest is Test {
         RejectingContract nonReceiver = new RejectingContract();
 
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.TransferToNonReceiver.selector);
+        vm.expectRevert(IBiuBiuPremium.TransferToNonReceiver.selector);
         premium.safeTransferFrom(user1, address(nonReceiver), 1);
     }
 
@@ -681,7 +681,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
         premium.transferFrom(user1, address(0), 1);
     }
 
@@ -691,7 +691,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
         premium.transferFrom(user2, referrer, 1); // user2 doesn't own token 1
     }
 
@@ -704,7 +704,7 @@ contract BiuBiuPremiumTest is Test {
     // Test activate with tokenId 0 (edge case - tokenId 0 doesn't exist)
     function testActivateTokenZero() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
         premium.activate(0);
     }
 
@@ -1033,34 +1033,34 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(BiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
         premium.activate(1);
     }
 
     // Test: Token attributes for tokenId 0 (should revert)
     function testGetTokenAttributesTokenZero() public {
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.getTokenAttributes(0);
     }
 
     // Test: subscribeToToken with tokenId 0 (should revert)
     function testSubscribeToTokenZero() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(0, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
     // Test: Overpayment should revert
     function testOverpaymentReverts() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.IncorrectPaymentAmount.selector);
+        vm.expectRevert(IBiuBiuPremium.IncorrectPaymentAmount.selector);
         premium.subscribe{value: monthlyPrice + 1 wei}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
     // Test: Underpayment should revert
     function testUnderpaymentReverts() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.IncorrectPaymentAmount.selector);
+        vm.expectRevert(IBiuBiuPremium.IncorrectPaymentAmount.selector);
         premium.subscribe{value: monthlyPrice - 1 wei}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
@@ -1070,7 +1070,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(BiuBiuPremium.NotApproved.selector);
+        vm.expectRevert(IBiuBiuPremium.NotApproved.selector);
         premium.transferFrom(user1, user2, 1);
     }
 
@@ -1080,7 +1080,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(BiuBiuPremium.NotApproved.selector);
+        vm.expectRevert(IBiuBiuPremium.NotApproved.selector);
         premium.safeTransferFrom(user1, user2, 1);
     }
 
@@ -1131,28 +1131,8 @@ contract BiuBiuPremiumTest is Test {
         assertTrue(isPremium);
     }
 
-    // Test: Contract can receive ETH from VAULT payment failure scenario
-    // Note: This is edge case where VAULT could be a contract that sometimes rejects
-    function testVaultCanBeContractThatRejects() public {
-        // Deploy a rejecting contract as vault
-        RejectingContract rejectingVault = new RejectingContract();
-        BiuBiuPremium premiumWithRejectingVault = new BiuBiuPremium(address(rejectingVault));
-
-        vm.deal(user1, 10 ether);
-
-        // Subscribe should succeed even if vault payment fails
-        // (contract keeps the funds)
-        uint256 price = premiumWithRejectingVault.MONTHLY_PRICE();
-        vm.prank(user1);
-        premiumWithRejectingVault.subscribe{value: price}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
-
-        // Subscription succeeded
-        (bool isPremium,,) = premiumWithRejectingVault.getSubscriptionInfo(user1);
-        assertTrue(isPremium);
-
-        // Contract still has the funds (vault rejected)
-        assertEq(address(premiumWithRejectingVault).balance, price);
-    }
+    // Note: testVaultCanBeContractThatRejects was removed because VAULT is now a constant
+    // and cannot be set to a rejecting contract at deployment time.
 
     // ============ Additional Edge Case Tests ============
 
@@ -1252,7 +1232,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Very large tokenId in subscribeToToken (non-existent)
     function testSubscribeToTokenMaxUint() public {
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(
             type(uint256).max, IBiuBiuPremium.SubscriptionTier.Monthly, address(0)
         );
@@ -1370,7 +1350,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 has no subscription
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
     }
 
@@ -1390,7 +1370,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 tries to call tool - should revert
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
     }
 
@@ -1411,7 +1391,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Try to call tool - should revert
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
     }
 
@@ -1441,7 +1421,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Try to call premium contract itself
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.InvalidTarget.selector);
+        vm.expectRevert(IBiuBiuPremium.InvalidTarget.selector);
         premium.callTool(address(premium), abi.encodeWithSignature("totalSupply()"));
     }
 
@@ -1453,7 +1433,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Try to call zero address
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.InvalidTarget.selector);
+        vm.expectRevert(IBiuBiuPremium.InvalidTarget.selector);
         premium.callTool(address(0), abi.encodeWithSignature("anything()"));
     }
 
@@ -1582,7 +1562,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Call revertWithoutReason - should get CallFailed
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        vm.expectRevert(IBiuBiuPremium.CallFailed.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("revertWithoutReason()"));
     }
 
@@ -1596,7 +1576,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Call revertWithEmptyReason
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        vm.expectRevert(IBiuBiuPremium.CallFailed.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("revertWithEmptyReason()"));
     }
 
@@ -1613,7 +1593,7 @@ contract BiuBiuPremiumTest is Test {
         // Call reentrant tool - it will try to call callTool again
         // The inner callTool should fail with ReentrancyDetected
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.ReentrancyDetected.selector);
+        vm.expectRevert(IBiuBiuPremium.ReentrancyDetected.selector);
         premium.callTool(address(reentrantTool), abi.encodeWithSignature("triggerReentry()"));
     }
 
@@ -1661,7 +1641,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Call with empty data to contract without fallback - should revert
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        vm.expectRevert(IBiuBiuPremium.CallFailed.selector);
         premium.callTool(address(tool), "");
     }
 
@@ -1784,7 +1764,7 @@ contract BiuBiuPremiumTest is Test {
 
         // Call nonexistent function - MockTool has no fallback, so it reverts
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.CallFailed.selector);
+        vm.expectRevert(IBiuBiuPremium.CallFailed.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("nonexistentFunction()"));
     }
 
@@ -1852,7 +1832,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1's active token is expired
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tool), abi.encodeWithSignature("getValue()"));
 
         // user1 activates token 2 (yearly, still valid)
@@ -2099,7 +2079,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
 
     function setUp() public {
         // Deploy BiuBiuPremium
-        premium = new BiuBiuPremium(vault);
+        premium = new BiuBiuPremium();
 
         // Deploy tool contracts
         tokenFactory = new TokenFactory();
@@ -2190,7 +2170,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
             abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "TestToken", "TT", uint8(18), 1000, false);
 
         vm.prank(nonMember);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tokenFactory), callData);
     }
 
@@ -2274,7 +2254,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
         );
 
         vm.prank(nonMember);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(nftFactory), callData);
     }
 
@@ -2334,7 +2314,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
         );
 
         vm.prank(nonMember);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tokenDistribution), callData);
     }
 
@@ -2391,7 +2371,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
         );
 
         vm.prank(nonMember);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tokenSweep), callData);
     }
 
@@ -2433,7 +2413,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
             abi.encodeWithSelector(TokenFactory.createTokenFree.selector, "TestToken", "TT", uint8(18), 1000, false);
 
         vm.prank(user1);
-        vm.expectRevert(BiuBiuPremium.NotPremiumMember.selector);
+        vm.expectRevert(IBiuBiuPremium.NotPremiumMember.selector);
         premium.callTool(address(tokenFactory), callData);
     }
 

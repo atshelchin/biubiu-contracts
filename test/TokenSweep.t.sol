@@ -45,7 +45,7 @@ contract TokenSweepTest is Test {
 
     function setUp() public {
         // Deploy premium contract with vault address
-        premium = new BiuBiuPremium(vault);
+        premium = new BiuBiuPremium();
 
         // Deploy TokenSweep (no constructor args - vault is hardcoded)
         tokenSweep = new TokenSweep();

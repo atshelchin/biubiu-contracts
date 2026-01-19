@@ -15,8 +15,7 @@ import {Vm} from "forge-std/Vm.sol";
 contract GeneratePremiumSVGPreview is Script {
     function run() external {
         // Deploy a fresh BiuBiuPremium for testing
-        address vault = address(0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA);
-        BiuBiuPremium premium = new BiuBiuPremium(vault);
+        BiuBiuPremium premium = new BiuBiuPremium();
 
         console.log("=== BiuBiu Premium SVG Preview Generator ===");
         console.log("Contract deployed at:", address(premium));

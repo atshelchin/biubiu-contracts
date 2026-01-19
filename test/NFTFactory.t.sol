@@ -32,7 +32,7 @@ contract NFTFactoryTest is Test {
     event MessageLeft(uint256 indexed tokenId, address indexed by, string message);
 
     function setUp() public {
-        premium = new BiuBiuPremium(vault);
+        premium = new BiuBiuPremium();
         metadata = new NFTMetadata();
         metadataAddr = address(metadata);
         factory = new NFTFactory(metadataAddr);

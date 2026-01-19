@@ -7,11 +7,32 @@ pragma solidity ^0.8.20;
  * @dev Stable API for frontend and other contracts to interact with BiuBiuPremium
  */
 interface IBiuBiuPremium {
+    // ============ Custom Errors ============
+
+    error ReentrancyDetected();
+    error IncorrectPaymentAmount();
+    error NotTokenOwner();
+    error TokenNotExists();
+    error InvalidAddress();
+    error NotApproved();
+    error TransferToNonReceiver();
+    error NotPremiumMember();
+    error InvalidTarget();
+    error CallFailed();
+
     // ============ Enums ============
 
     enum SubscriptionTier {
         Monthly, // 30 days
         Yearly // 365 days
+    }
+
+    // ============ Structs ============
+
+    struct TokenAttributes {
+        uint256 mintedAt;
+        address mintedBy;
+        uint256 renewalCount;
     }
 
     // ============ Events ============
