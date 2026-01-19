@@ -35,15 +35,10 @@ contract WETH is IWETH {
      * @dev The approval amount is accumulated with existing allowance
      */
     function depositAndApprove(address spender) public payable {
-        require(msg.value > 0, "WETH: deposit amount must be greater than 0");
         require(spender != address(0), "WETH: approve to the zero address");
-
-        balanceOf[msg.sender] += msg.value;
-        totalSupply += msg.value;
+        deposit();
         allowance[msg.sender][spender] += msg.value;
-
         emit DepositAndApprove(msg.sender, spender, msg.value);
-        emit Transfer(address(0), msg.sender, msg.value);
         emit Approval(msg.sender, spender, allowance[msg.sender][spender]);
     }
 

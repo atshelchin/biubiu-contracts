@@ -109,10 +109,14 @@ contract WETHTest is Test {
     function test_DepositAndApprove() public {
         vm.startPrank(alice);
 
-        vm.expectEmit(true, true, false, true);
-        emit DepositAndApprove(alice, bob, 1 ether);
+        // deposit() emits Deposit and Transfer first
+        vm.expectEmit(true, false, false, true);
+        emit Deposit(alice, 1 ether);
         vm.expectEmit(true, true, false, true);
         emit Transfer(address(0), alice, 1 ether);
+        // then depositAndApprove emits its events
+        vm.expectEmit(true, true, false, true);
+        emit DepositAndApprove(alice, bob, 1 ether);
         vm.expectEmit(true, true, false, true);
         emit Approval(alice, bob, 1 ether);
 
