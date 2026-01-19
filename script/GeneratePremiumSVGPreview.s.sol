@@ -37,7 +37,7 @@ contract GeneratePremiumSVGPreview is Script {
         // Fund and subscribe to mint NFT
         vm.deal(testUser, 10 ether);
         vm.startPrank(testUser);
-        premium.subscribe{value: premium.MONTHLY_PRICE()}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribe{value: premium.MONTHLY_PRICE()}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
         vm.stopPrank();
 
         uint256 tokenId = premium.nextTokenId() - 1;

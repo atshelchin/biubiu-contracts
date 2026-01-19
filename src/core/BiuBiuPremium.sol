@@ -168,15 +168,17 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
 
     function subscribe(
         SubscriptionTier tier,
-        address referrer
+        address referrer,
+        address recipient
     ) external payable nonReentrant {
-        uint256 activeTokenId = activeSubscription[msg.sender];
+        address to = recipient == address(0) ? msg.sender : recipient;
+        uint256 activeTokenId = activeSubscription[to];
 
         if (activeTokenId != 0) {
             _renewSubscription(activeTokenId, tier, referrer);
         } else {
             uint256 tokenId = _nextTokenId++;
-            _safeMint(msg.sender, tokenId);
+            _safeMint(to, tokenId);
             _renewSubscription(tokenId, tier, referrer);
         }
     }

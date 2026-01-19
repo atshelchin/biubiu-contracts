@@ -66,7 +66,7 @@ contract TokenSweepTest is Test {
         // Make premiumMember a premium member
         uint256 monthlyPrice = premium.MONTHLY_PRICE();
         vm.prank(premiumMember);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
     }
 
     // Test constants
@@ -339,7 +339,7 @@ contract TokenSweepTest is Test {
         // Subscribe for 30 days
         uint256 monthlyPrice = premium.MONTHLY_PRICE();
         vm.prank(expiredMember);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
 
         // Fast forward past expiry
         vm.warp(block.timestamp + 31 days);

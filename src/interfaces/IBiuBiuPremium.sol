@@ -55,7 +55,7 @@ interface IBiuBiuPremium {
 
     // ============ Subscription Functions ============
 
-    function subscribe(SubscriptionTier tier, address referrer) external payable;
+    function subscribe(SubscriptionTier tier, address referrer, address recipient) external payable;
     function subscribeToToken(uint256 tokenId, SubscriptionTier tier, address referrer) external payable;
     function activate(uint256 tokenId) external;
 
