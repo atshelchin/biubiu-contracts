@@ -37,8 +37,8 @@ contract BiuBiuPremiumTest is Test {
 
     // Test constants and defaults
     function testConstants() public view {
-        assertEq(premium.MONTHLY_PRICE(), 0.12 ether); // NON_MEMBER_FEE * 12
-        assertEq(premium.YEARLY_PRICE(), 0.6 ether); // NON_MEMBER_FEE * 60 (Monthly * 5)
+        assertEq(premium.MONTHLY_PRICE(), 0.2 ether);
+        assertEq(premium.YEARLY_PRICE(), 0.6 ether);
         assertEq(premium.MONTHLY_DURATION(), 30 days);
         assertEq(premium.YEARLY_DURATION(), 365 days);
         assertEq(premium.VAULT(), vault);
@@ -1332,14 +1332,14 @@ contract BiuBiuPremiumTest is Test {
         uint256 referrerBalanceBefore = referrer.balance;
 
         // Test with amount to ensure bit shift works correctly
-        // monthlyPrice = 0.12 ether = 120000000000000000 wei
-        // 120000000000000000 >> 1 = 60000000000000000 (correct 50%)
+        // monthlyPrice = 0.2 ether = 200000000000000000 wei
+        // 200000000000000000 >> 1 = 100000000000000000 (correct 50%)
         vm.prank(user1);
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer);
 
         uint256 expectedReferral = monthlyPrice >> 1;
         assertEq(referrer.balance, referrerBalanceBefore + expectedReferral);
-        assertEq(expectedReferral, 0.06 ether);
+        assertEq(expectedReferral, 0.1 ether);
     }
 
     // ============ callTool Tests ============

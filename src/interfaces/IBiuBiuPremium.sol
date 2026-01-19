@@ -54,11 +54,11 @@ interface IBiuBiuPremium {
 
     // ============ Pricing ============
 
-    function MONTHLY_PRICE() external pure returns (uint256);
-    function YEARLY_PRICE() external pure returns (uint256);
+    function MONTHLY_PRICE() external view returns (uint256);
+    function YEARLY_PRICE() external view returns (uint256);
     function MONTHLY_DURATION() external view returns (uint256);
     function YEARLY_DURATION() external view returns (uint256);
-    function NON_MEMBER_FEE() external pure returns (uint256);
+    function NON_MEMBER_FEE() external view returns (uint256);
     function VAULT() external view returns (address);
 
     // ============ ERC721 Standard ============

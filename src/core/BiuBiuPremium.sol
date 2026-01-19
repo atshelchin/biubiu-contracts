@@ -18,8 +18,8 @@ contract BiuBiuPremium is IBiuBiuPremium {
     string public constant name = "BiuBiu Premium";
     string public constant symbol = "BBP";
     uint256 public constant NON_MEMBER_FEE = 0.01 ether;
-    uint256 public constant MONTHLY_MULTIPLIER = 12;
-    uint256 public constant YEARLY_MULTIPLIER = 60;
+    uint256 public constant MONTHLY_PRICE = 0.2 ether;
+    uint256 public constant YEARLY_PRICE = 0.6 ether;
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
     address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
@@ -266,16 +266,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
 
     // ============ Subscription ============
 
-    // --- pure ---
-
-    function MONTHLY_PRICE() public pure returns (uint256) {
-        return NON_MEMBER_FEE * MONTHLY_MULTIPLIER;
-    }
-
-    function YEARLY_PRICE() public pure returns (uint256) {
-        return NON_MEMBER_FEE * YEARLY_MULTIPLIER;
-    }
-
     // --- view ---
 
     function nextTokenId() external view returns (uint256) {
@@ -406,9 +396,9 @@ contract BiuBiuPremium is IBiuBiuPremium {
         SubscriptionTier tier
     ) private pure returns (uint256 price, uint256 duration) {
         if (tier == SubscriptionTier.Monthly) {
-            return (MONTHLY_PRICE(), MONTHLY_DURATION);
+            return (MONTHLY_PRICE, MONTHLY_DURATION);
         } else {
-            return (YEARLY_PRICE(), YEARLY_DURATION);
+            return (YEARLY_PRICE, YEARLY_DURATION);
         }
     }
 
