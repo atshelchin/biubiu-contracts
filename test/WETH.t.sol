@@ -200,7 +200,7 @@ contract WETHTest is Test {
     function test_WithdrawZeroBalanceReverts() public {
         vm.startPrank(alice);
 
-        vm.expectRevert("WETH: no balance to withdraw");
+        vm.expectRevert("WETH: amount must be greater than 0");
         weth.withdraw();
 
         vm.stopPrank();
@@ -212,7 +212,7 @@ contract WETHTest is Test {
         weth.deposit{value: 1 ether}();
         weth.transfer(bob, 1 ether);
 
-        vm.expectRevert("WETH: no balance to withdraw");
+        vm.expectRevert("WETH: amount must be greater than 0");
         weth.withdraw();
 
         vm.stopPrank();
@@ -635,9 +635,9 @@ contract ReentrancyAttacker {
             try weth.withdraw() {
                 revert("CEI protection failed - reentrancy succeeded!");
             } catch Error(string memory reason) {
-                // Expected: "WETH: no balance to withdraw"
+                // Expected: "WETH: amount must be greater than 0"
                 require(
-                    keccak256(bytes(reason)) == keccak256(bytes("WETH: no balance to withdraw")),
+                    keccak256(bytes(reason)) == keccak256(bytes("WETH: amount must be greater than 0")),
                     "Unexpected error message"
                 );
             }

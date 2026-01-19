@@ -49,20 +49,9 @@ contract WETH is IWETH {
 
     /**
      * @notice Withdraw all WETH and receive native coin
-     * @dev Uses CEI (Checks-Effects-Interactions) pattern for reentrancy protection
      */
     function withdraw() public {
-        uint256 amount = balanceOf[msg.sender];
-        require(amount > 0, "WETH: no balance to withdraw");
-
-        balanceOf[msg.sender] = 0;
-        totalSupply -= amount;
-
-        (bool success,) = msg.sender.call{value: amount}("");
-        require(success, "WETH: ETH transfer failed");
-
-        emit Withdrawal(msg.sender, amount);
-        emit Transfer(msg.sender, address(0), amount);
+        withdraw(balanceOf[msg.sender]);
     }
 
     /**
