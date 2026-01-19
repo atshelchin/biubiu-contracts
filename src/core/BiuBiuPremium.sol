@@ -2,25 +2,22 @@
 pragma solidity ^0.8.20;
 
 import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
-import {IERC721Receiver} from "../interfaces/IERC721Receiver.sol";
+import {ERC721Base} from "../libraries/ERC721Base.sol";
+import {ReentrancyGuard} from "../libraries/ReentrancyGuard.sol";
 import {Base64} from "../libraries/Base64.sol";
 import {Strings} from "../libraries/Strings.sol";
-import {ReentrancyGuard} from "../libraries/ReentrancyGuard.sol";
 
 /**
  * @title BiuBiuPremium
  * @notice A subscription NFT contract with three tiers and referral system
  * @dev Subscription info is bound to NFT tokenId. Users can hold multiple NFTs but only activate one at a time.
- *      Implements ERC721 without external dependencies.
+ *      Inherits ERC721Base for standard NFT functionality.
  */
-contract BiuBiuPremium is IBiuBiuPremium, ReentrancyGuard {
-    // ============ Constants & Immutables ============
+contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
+    // ============ Constants ============
 
-    string public constant name = "BiuBiu Premium";
-    string public constant symbol = "BBP";
-    uint256 public constant NON_MEMBER_FEE = 0.01 ether;
     uint256 public constant MONTHLY_PRICE = 0.2 ether;
-    uint256 public constant YEARLY_PRICE = 0.6 ether;
+    uint256 public constant YEARLY_PRICE = 0.4 ether;
     uint256 public constant MONTHLY_DURATION = 30 days;
     uint256 public constant YEARLY_DURATION = 365 days;
     address public constant VAULT = 0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA;
@@ -28,58 +25,21 @@ contract BiuBiuPremium is IBiuBiuPremium, ReentrancyGuard {
     // ============ State Variables ============
 
     uint256 private _nextTokenId = 1;
-    uint256 private _totalSupply;
-
-    mapping(uint256 => address) private _owners;
-    mapping(address => uint256) private _balances;
-    mapping(uint256 => address) private _tokenApprovals;
-    mapping(address => mapping(address => bool)) private _operatorApprovals;
-
     mapping(uint256 => uint256) public subscriptionExpiry;
     mapping(uint256 => TokenAttributes) private _tokenAttributes;
     mapping(address => uint256) public activeSubscription;
 
-    // ============ ERC721 ============
+    // ============ ERC721 Overrides ============
 
-    // --- pure ---
-
-    function supportsInterface(bytes4 interfaceId) public pure returns (bool) {
-        return
-            interfaceId == 0x80ac58cd ||
-            interfaceId == 0x5b5e139f ||
-            interfaceId == 0x01ffc9a7;
+    function name() public pure override returns (string memory) {
+        return "BiuBiu Premium";
     }
 
-    // --- view ---
-
-    function totalSupply() public view returns (uint256) {
-        return _totalSupply;
+    function symbol() public pure override returns (string memory) {
+        return "BBP";
     }
 
-    function balanceOf(address owner) public view returns (uint256) {
-        if (owner == address(0)) revert InvalidAddress();
-        return _balances[owner];
-    }
-
-    function ownerOf(uint256 tokenId) public view returns (address) {
-        address owner = _owners[tokenId];
-        if (owner == address(0)) revert TokenNotExists();
-        return owner;
-    }
-
-    function getApproved(uint256 tokenId) public view returns (address) {
-        if (_owners[tokenId] == address(0)) revert TokenNotExists();
-        return _tokenApprovals[tokenId];
-    }
-
-    function isApprovedForAll(
-        address owner,
-        address operator
-    ) public view returns (bool) {
-        return _operatorApprovals[owner][operator];
-    }
-
-    function tokenURI(uint256 tokenId) public view returns (string memory) {
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
 
         TokenAttributes storage attrs = _tokenAttributes[tokenId];
@@ -125,140 +85,39 @@ contract BiuBiuPremium is IBiuBiuPremium, ReentrancyGuard {
             );
     }
 
-    // --- state-modifying ---
+    // ============ ERC721 Hooks ============
 
-    function approve(address to, uint256 tokenId) public {
-        address owner = ownerOf(tokenId);
-        if (to == owner) revert InvalidAddress();
-        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) {
-            revert NotApproved();
-        }
-        _tokenApprovals[tokenId] = to;
-        emit Approval(owner, to, tokenId);
-    }
-
-    function setApprovalForAll(address operator, bool approved) public {
-        if (operator == msg.sender) revert InvalidAddress();
-        _operatorApprovals[msg.sender][operator] = approved;
-        emit ApprovalForAll(msg.sender, operator, approved);
-    }
-
-    function transferFrom(address from, address to, uint256 tokenId) public {
-        if (!_isApprovedOrOwner(msg.sender, tokenId)) revert NotApproved();
-        _transfer(from, to, tokenId);
-    }
-
-    function safeTransferFrom(
+    function _beforeTokenTransfer(
         address from,
         address to,
         uint256 tokenId
-    ) public {
-        safeTransferFrom(from, to, tokenId, "");
-    }
-
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public {
-        if (!_isApprovedOrOwner(msg.sender, tokenId)) revert NotApproved();
-        _transfer(from, to, tokenId);
-        if (!_checkOnERC721Received(from, to, tokenId, data)) {
-            revert TransferToNonReceiver();
+    ) internal override {
+        // Handle mint
+        if (from == address(0)) {
+            if (activeSubscription[to] == 0) {
+                activeSubscription[to] = tokenId;
+                emit Activated(to, tokenId);
+            }
+            _tokenAttributes[tokenId] = TokenAttributes({
+                mintedAt: block.timestamp,
+                mintedBy: msg.sender,
+                renewalCount: 0
+            });
         }
-    }
-
-    // --- private ---
-
-    function _isApprovedOrOwner(
-        address spender,
-        uint256 tokenId
-    ) private view returns (bool) {
-        address owner = ownerOf(tokenId);
-        return (spender == owner ||
-            getApproved(tokenId) == spender ||
-            isApprovedForAll(owner, spender));
-    }
-
-    function _transfer(address from, address to, uint256 tokenId) private {
-        if (ownerOf(tokenId) != from) revert NotTokenOwner();
-        if (to == address(0)) revert InvalidAddress();
-
-        delete _tokenApprovals[tokenId];
-
-        if (activeSubscription[from] == tokenId) {
-            activeSubscription[from] = 0;
-            emit Deactivated(from, tokenId);
-        }
-        if (activeSubscription[to] == 0) {
-            activeSubscription[to] = tokenId;
-            emit Activated(to, tokenId);
-        }
-
-        unchecked {
-            _balances[from] -= 1;
-            _balances[to] += 1;
-        }
-        _owners[tokenId] = to;
-
-        emit Transfer(from, to, tokenId);
-    }
-
-    function _mint(address to, uint256 tokenId) private {
-        if (to == address(0)) revert InvalidAddress();
-
-        if (activeSubscription[to] == 0) {
-            activeSubscription[to] = tokenId;
-            emit Activated(to, tokenId);
-        }
-
-        _tokenAttributes[tokenId] = TokenAttributes({
-            mintedAt: block.timestamp,
-            mintedBy: msg.sender,
-            renewalCount: 0
-        });
-
-        unchecked {
-            _balances[to] += 1;
-            _totalSupply += 1;
-        }
-        _owners[tokenId] = to;
-
-        emit Transfer(address(0), to, tokenId);
-    }
-
-    function _safeMint(address to, uint256 tokenId) private {
-        _mint(to, tokenId);
-        if (!_checkOnERC721Received(address(0), to, tokenId, "")) {
-            revert TransferToNonReceiver();
-        }
-    }
-
-    function _checkOnERC721Received(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) private returns (bool) {
-        if (to.code.length == 0) return true;
-        try
-            IERC721Receiver(to).onERC721Received(
-                msg.sender,
-                from,
-                tokenId,
-                data
-            )
-        returns (bytes4 retval) {
-            return retval == IERC721Receiver.onERC721Received.selector;
-        } catch {
-            return false;
+        // Handle transfer (not mint or burn)
+        else if (to != address(0)) {
+            if (activeSubscription[from] == tokenId) {
+                activeSubscription[from] = 0;
+                emit Deactivated(from, tokenId);
+            }
+            if (activeSubscription[to] == 0) {
+                activeSubscription[to] = tokenId;
+                emit Activated(to, tokenId);
+            }
         }
     }
 
     // ============ Subscription ============
-
-    // --- view ---
 
     function nextTokenId() external view returns (uint256) {
         return _nextTokenId;
@@ -303,8 +162,6 @@ contract BiuBiuPremium is IBiuBiuPremium, ReentrancyGuard {
         return (attrs.mintedAt, attrs.mintedBy, attrs.renewalCount);
     }
 
-    // --- state-modifying ---
-
     function subscribe(
         SubscriptionTier tier,
         address referrer
@@ -334,8 +191,6 @@ contract BiuBiuPremium is IBiuBiuPremium, ReentrancyGuard {
         activeSubscription[msg.sender] = tokenId;
         emit Activated(msg.sender, tokenId);
     }
-
-    // --- private ---
 
     function _renewSubscription(
         uint256 tokenId,

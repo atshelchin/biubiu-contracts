@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 import {IBiuBiuPremium} from "../src/interfaces/IBiuBiuPremium.sol";
+import {ERC721Base} from "../src/libraries/ERC721Base.sol";
 import {ReentrancyGuard} from "../src/libraries/ReentrancyGuard.sol";
 
 // Tool contract imports for integration testing
@@ -39,11 +40,10 @@ contract BiuBiuPremiumTest is Test {
     // Test constants and defaults
     function testConstants() public view {
         assertEq(premium.MONTHLY_PRICE(), 0.2 ether);
-        assertEq(premium.YEARLY_PRICE(), 0.6 ether);
+        assertEq(premium.YEARLY_PRICE(), 0.4 ether);
         assertEq(premium.MONTHLY_DURATION(), 30 days);
         assertEq(premium.YEARLY_DURATION(), 365 days);
         assertEq(premium.VAULT(), vault);
-        assertEq(premium.NON_MEMBER_FEE(), 0.01 ether);
     }
 
     // Test ERC721 basics
@@ -288,7 +288,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(ERC721Base.NotTokenOwner.selector);
         premium.activate(1);
     }
 
@@ -311,7 +311,7 @@ contract BiuBiuPremiumTest is Test {
     // Test subscribeToToken for non-existent token
     function testSubscribeToTokenNotExists() public {
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(999, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
@@ -478,7 +478,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test getTokenAttributes for non-existent token
     function testGetTokenAttributesNotExists() public {
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.getTokenAttributes(999);
     }
 
@@ -551,7 +551,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test getTokenSubscriptionInfo reverts for non-existent token
     function testGetTokenSubscriptionInfoNotExists() public {
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.getTokenSubscriptionInfo(999);
     }
 
@@ -575,7 +575,7 @@ contract BiuBiuPremiumTest is Test {
 
     // Test tokenURI for non-existent token
     function testTokenURINotExists() public {
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.tokenURI(999);
     }
 
@@ -597,19 +597,19 @@ contract BiuBiuPremiumTest is Test {
 
     // Test balanceOf with zero address reverts
     function testBalanceOfZeroAddress() public {
-        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(ERC721Base.InvalidAddress.selector);
         premium.balanceOf(address(0));
     }
 
     // Test ownerOf for non-existent token
     function testOwnerOfNotExists() public {
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.ownerOf(999);
     }
 
     // Test getApproved for non-existent token
     function testGetApprovedNotExists() public {
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.getApproved(999);
     }
 
@@ -619,7 +619,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(ERC721Base.InvalidAddress.selector);
         premium.approve(user1, 1);
     }
 
@@ -629,14 +629,14 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(IBiuBiuPremium.NotApproved.selector);
+        vm.expectRevert(ERC721Base.NotApproved.selector);
         premium.approve(referrer, 1);
     }
 
     // Test setApprovalForAll to self reverts
     function testSetApprovalForAllToSelf() public {
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(ERC721Base.InvalidAddress.selector);
         premium.setApprovalForAll(user1, true);
     }
 
@@ -672,7 +672,7 @@ contract BiuBiuPremiumTest is Test {
         RejectingContract nonReceiver = new RejectingContract();
 
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.TransferToNonReceiver.selector);
+        vm.expectRevert(ERC721Base.TransferToNonReceiver.selector);
         premium.safeTransferFrom(user1, address(nonReceiver), 1);
     }
 
@@ -682,7 +682,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.InvalidAddress.selector);
+        vm.expectRevert(ERC721Base.InvalidAddress.selector);
         premium.transferFrom(user1, address(0), 1);
     }
 
@@ -692,7 +692,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(ERC721Base.NotTokenOwner.selector);
         premium.transferFrom(user2, referrer, 1); // user2 doesn't own token 1
     }
 
@@ -705,7 +705,7 @@ contract BiuBiuPremiumTest is Test {
     // Test activate with tokenId 0 (edge case - tokenId 0 doesn't exist)
     function testActivateTokenZero() public {
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(ERC721Base.NotTokenOwner.selector);
         premium.activate(0);
     }
 
@@ -1034,20 +1034,20 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(IBiuBiuPremium.NotTokenOwner.selector);
+        vm.expectRevert(ERC721Base.NotTokenOwner.selector);
         premium.activate(1);
     }
 
     // Test: Token attributes for tokenId 0 (should revert)
     function testGetTokenAttributesTokenZero() public {
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.getTokenAttributes(0);
     }
 
     // Test: subscribeToToken with tokenId 0 (should revert)
     function testSubscribeToTokenZero() public {
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(0, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
     }
 
@@ -1071,7 +1071,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(IBiuBiuPremium.NotApproved.selector);
+        vm.expectRevert(ERC721Base.NotApproved.selector);
         premium.transferFrom(user1, user2, 1);
     }
 
@@ -1081,7 +1081,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         vm.prank(user2);
-        vm.expectRevert(IBiuBiuPremium.NotApproved.selector);
+        vm.expectRevert(ERC721Base.NotApproved.selector);
         premium.safeTransferFrom(user1, user2, 1);
     }
 
@@ -1233,7 +1233,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Very large tokenId in subscribeToToken (non-existent)
     function testSubscribeToTokenMaxUint() public {
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.TokenNotExists.selector);
+        vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(
             type(uint256).max, IBiuBiuPremium.SubscriptionTier.Monthly, address(0)
         );

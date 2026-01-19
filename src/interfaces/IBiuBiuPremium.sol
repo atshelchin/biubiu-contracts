@@ -5,16 +5,12 @@ pragma solidity ^0.8.20;
  * @title IBiuBiuPremium
  * @notice Interface for BiuBiuPremium subscription NFT contract
  * @dev Stable API for frontend and other contracts to interact with BiuBiuPremium
+ *      ERC721 functions are inherited from ERC721Base (which implements IERC721)
  */
 interface IBiuBiuPremium {
     // ============ Custom Errors ============
 
     error IncorrectPaymentAmount();
-    error NotTokenOwner();
-    error TokenNotExists();
-    error InvalidAddress();
-    error NotApproved();
-    error TransferToNonReceiver();
     error NotPremiumMember();
     error InvalidTarget();
     error CallFailed();
@@ -36,9 +32,6 @@ interface IBiuBiuPremium {
 
     // ============ Events ============
 
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-    event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
-    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
     event Subscribed(
         address indexed user,
         uint256 indexed tokenId,
@@ -57,25 +50,7 @@ interface IBiuBiuPremium {
     function YEARLY_PRICE() external view returns (uint256);
     function MONTHLY_DURATION() external view returns (uint256);
     function YEARLY_DURATION() external view returns (uint256);
-    function NON_MEMBER_FEE() external view returns (uint256);
     function VAULT() external view returns (address);
-
-    // ============ ERC721 Standard ============
-
-    function name() external view returns (string memory);
-    function symbol() external view returns (string memory);
-    function totalSupply() external view returns (uint256);
-    function balanceOf(address owner) external view returns (uint256);
-    function ownerOf(uint256 tokenId) external view returns (address);
-    function approve(address to, uint256 tokenId) external;
-    function getApproved(uint256 tokenId) external view returns (address);
-    function setApprovalForAll(address operator, bool approved) external;
-    function isApprovedForAll(address owner, address operator) external view returns (bool);
-    function transferFrom(address from, address to, uint256 tokenId) external;
-    function safeTransferFrom(address from, address to, uint256 tokenId) external;
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external;
-    function supportsInterface(bytes4 interfaceId) external view returns (bool);
-    function tokenURI(uint256 tokenId) external view returns (string memory);
 
     // ============ Subscription Functions ============
 
