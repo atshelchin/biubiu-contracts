@@ -77,10 +77,7 @@ contract WETH is IWETH {
         require(to != address(0), "WETH: transfer to the zero address");
         require(balanceOf[msg.sender] >= value, "WETH: insufficient balance");
 
-        balanceOf[msg.sender] -= value;
-        balanceOf[to] += value;
-
-        emit Transfer(msg.sender, to, value);
+        _transfer(msg.sender, to, value);
         return true;
     }
 
@@ -110,11 +107,8 @@ contract WETH is IWETH {
         require(balanceOf[from] >= value, "WETH: insufficient balance");
         require(allowance[from][msg.sender] >= value, "WETH: insufficient allowance");
 
-        balanceOf[from] -= value;
-        balanceOf[to] += value;
         allowance[from][msg.sender] -= value;
-
-        emit Transfer(from, to, value);
+        _transfer(from, to, value);
         return true;
     }
 
@@ -130,5 +124,17 @@ contract WETH is IWETH {
      */
     fallback() external payable {
         deposit();
+    }
+
+    /**
+     * @dev Internal transfer logic
+     * @param from The sender address
+     * @param to The recipient address
+     * @param value The amount to transfer
+     */
+    function _transfer(address from, address to, uint256 value) internal {
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
+        emit Transfer(from, to, value);
     }
 }
