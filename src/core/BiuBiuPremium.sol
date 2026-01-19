@@ -9,7 +9,7 @@ import {Strings} from "../libraries/Strings.sol";
 
 /**
  * @title BiuBiuPremium
- * @notice A subscription NFT contract with three tiers and referral system
+ * @notice A subscription NFT contract with two tiers (Monthly/Yearly) and referral system
  * @dev Subscription info is bound to NFT tokenId. Users can hold multiple NFTs but only activate one at a time.
  *      Inherits ERC721Base for standard NFT functionality.
  */
