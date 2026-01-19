@@ -1,0 +1,37 @@
+#!/bin/bash
+# Pre-commit hook to prevent modifications to frozen files
+# Install: git config core.hooksPath .githooks
+
+FROZEN_FILE=".frozen"
+
+if [ ! -f "$FROZEN_FILE" ]; then
+    exit 0
+fi
+
+# Get list of staged files
+STAGED_FILES=$(git diff --cached --name-only)
+
+# Read frozen files (skip comments and empty lines)
+FROZEN_FILES=$(grep -v '^#' "$FROZEN_FILE" | grep -v '^$')
+
+BLOCKED=0
+
+for staged in $STAGED_FILES; do
+    for frozen in $FROZEN_FILES; do
+        if [ "$staged" = "$frozen" ]; then
+            echo "ERROR: Attempt to modify frozen file: $staged"
+            echo "       This file has been audited and should not be changed."
+            echo "       If you must modify it, remove it from .frozen first."
+            BLOCKED=1
+        fi
+    done
+done
+
+if [ $BLOCKED -eq 1 ]; then
+    echo ""
+    echo "Commit blocked. Frozen files cannot be modified."
+    echo "See .frozen for the list of protected files."
+    exit 1
+fi
+
+exit 0
