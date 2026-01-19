@@ -25,7 +25,6 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
     // ============ State Variables ============
 
     uint256 private _nextTokenId = 1;
-    mapping(uint256 => uint256) public subscriptionExpiry;
     mapping(uint256 => TokenAttributes) private _tokenAttributes;
     mapping(address => uint256) public activeSubscription;
 
@@ -43,7 +42,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
 
         TokenAttributes storage attrs = _tokenAttributes[tokenId];
-        uint256 expiry = subscriptionExpiry[tokenId];
+        uint256 expiry = attrs.expiry;
         bool isActive = expiry > block.timestamp;
 
         string memory svg = _generateSVG(tokenId, isActive);
@@ -101,7 +100,8 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
             _tokenAttributes[tokenId] = TokenAttributes({
                 mintedAt: block.timestamp,
                 mintedBy: msg.sender,
-                renewalCount: 0
+                renewalCount: 0,
+                expiry: 0
             });
         }
         // Handle transfer (not mint or burn)
@@ -132,7 +132,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
     {
         uint256 activeTokenId = activeSubscription[user];
         if (activeTokenId == 0) return (false, 0, 0);
-        expiryTime = subscriptionExpiry[activeTokenId];
+        expiryTime = _tokenAttributes[activeTokenId].expiry;
         isPremium = expiryTime > block.timestamp;
         remainingTime = isPremium ? expiryTime - block.timestamp : 0;
     }
@@ -146,7 +146,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
     {
         tokenOwner = _owners[tokenId];
         if (tokenOwner == address(0)) revert TokenNotExists();
-        expiryTime = subscriptionExpiry[tokenId];
+        expiryTime = _tokenAttributes[tokenId].expiry;
         isExpired = expiryTime <= block.timestamp;
     }
 
@@ -155,11 +155,15 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
     )
         external
         view
-        returns (uint256 mintedAt, address mintedBy, uint256 renewalCount)
+        returns (uint256 mintedAt, address mintedBy, uint256 renewalCount, uint256 expiry)
     {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
         TokenAttributes storage attrs = _tokenAttributes[tokenId];
-        return (attrs.mintedAt, attrs.mintedBy, attrs.renewalCount);
+        return (attrs.mintedAt, attrs.mintedBy, attrs.renewalCount, attrs.expiry);
+    }
+
+    function subscriptionExpiry(uint256 tokenId) external view returns (uint256) {
+        return _tokenAttributes[tokenId].expiry;
     }
 
     function subscribe(
@@ -202,14 +206,15 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         (uint256 price, uint256 duration) = _getTierInfo(tier);
         if (msg.value != price) revert IncorrectPaymentAmount();
 
-        uint256 currentExpiry = subscriptionExpiry[tokenId];
+        TokenAttributes storage attrs = _tokenAttributes[tokenId];
+        uint256 currentExpiry = attrs.expiry;
         uint256 newExpiry = currentExpiry > block.timestamp
             ? currentExpiry + duration
             : block.timestamp + duration;
-        subscriptionExpiry[tokenId] = newExpiry;
+        attrs.expiry = newExpiry;
 
         unchecked {
-            _tokenAttributes[tokenId].renewalCount += 1;
+            attrs.renewalCount += 1;
         }
 
         uint256 referralAmount;
@@ -258,7 +263,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         uint256 activeTokenId = activeSubscription[msg.sender];
         if (
             activeTokenId == 0 ||
-            subscriptionExpiry[activeTokenId] <= block.timestamp
+            _tokenAttributes[activeTokenId].expiry <= block.timestamp
         ) {
             revert NotPremiumMember();
         }

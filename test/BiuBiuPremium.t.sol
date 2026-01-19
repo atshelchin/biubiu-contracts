@@ -444,7 +444,7 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(user1);
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
-        (uint256 mintedAt, address mintedBy, uint256 renewalCount) = premium.getTokenAttributes(1);
+        (uint256 mintedAt, address mintedBy, uint256 renewalCount,) = premium.getTokenAttributes(1);
 
         assertEq(mintedAt, mintTime);
         assertEq(mintedBy, user1);
@@ -458,19 +458,19 @@ contract BiuBiuPremiumTest is Test {
         // First subscription - mints NFT with renewalCount = 1
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
-        (,, uint256 count1) = premium.getTokenAttributes(1);
+        (,, uint256 count1,) = premium.getTokenAttributes(1);
         assertEq(count1, 1);
 
         // Second subscription - renews existing, renewalCount = 2
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
-        (,, uint256 count2) = premium.getTokenAttributes(1);
+        (,, uint256 count2,) = premium.getTokenAttributes(1);
         assertEq(count2, 2);
 
         // Third subscription - renewalCount = 3
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
-        (,, uint256 count3) = premium.getTokenAttributes(1);
+        (,, uint256 count3,) = premium.getTokenAttributes(1);
         assertEq(count3, 3);
 
         vm.stopPrank();
@@ -495,7 +495,7 @@ contract BiuBiuPremiumTest is Test {
         premium.transferFrom(user1, user2, 1);
 
         // Attributes should still show user1 as the original minter
-        (uint256 mintedAt, address mintedBy, uint256 renewalCount) = premium.getTokenAttributes(1);
+        (uint256 mintedAt, address mintedBy, uint256 renewalCount,) = premium.getTokenAttributes(1);
 
         assertEq(mintedAt, mintTime);
         assertEq(mintedBy, user1); // Original minter preserved
@@ -506,7 +506,7 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         // User2's active token is now token 1 (auto-activated on transfer)
-        (, address mintedBy2, uint256 count2) = premium.getTokenAttributes(1);
+        (, address mintedBy2, uint256 count2,) = premium.getTokenAttributes(1);
         assertEq(mintedBy2, user1); // Still user1
         assertEq(count2, 2); // Renewal count increased
     }
@@ -517,14 +517,14 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(user1);
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
-        (,, uint256 count1) = premium.getTokenAttributes(1);
+        (,, uint256 count1,) = premium.getTokenAttributes(1);
         assertEq(count1, 1);
 
         // User2 gifts more time via subscribeToToken
         vm.prank(user2);
         premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
-        (,, uint256 count2) = premium.getTokenAttributes(1);
+        (,, uint256 count2,) = premium.getTokenAttributes(1);
         assertEq(count2, 2); // Gift also counts as renewal
     }
 
@@ -1270,9 +1270,9 @@ contract BiuBiuPremiumTest is Test {
         premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
 
         // All should have same mintedAt (same block)
-        (uint256 mintedAt1,,) = premium.getTokenAttributes(1);
-        (uint256 mintedAt2,,) = premium.getTokenAttributes(2);
-        (uint256 mintedAt3,,) = premium.getTokenAttributes(3);
+        (uint256 mintedAt1,,,) = premium.getTokenAttributes(1);
+        (uint256 mintedAt2,,,) = premium.getTokenAttributes(2);
+        (uint256 mintedAt3,,,) = premium.getTokenAttributes(3);
 
         assertEq(mintedAt1, mintedAt2);
         assertEq(mintedAt2, mintedAt3);

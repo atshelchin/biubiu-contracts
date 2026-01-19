@@ -28,6 +28,7 @@ interface IBiuBiuPremium {
         uint256 mintedAt;
         address mintedBy;
         uint256 renewalCount;
+        uint256 expiry;
     }
 
     // ============ Events ============
@@ -73,7 +74,7 @@ interface IBiuBiuPremium {
     function getTokenAttributes(uint256 tokenId)
         external
         view
-        returns (uint256 mintedAt, address mintedBy, uint256 renewalCount);
+        returns (uint256 mintedAt, address mintedBy, uint256 renewalCount, uint256 expiry);
 
     function nextTokenId() external view returns (uint256);
     function subscriptionExpiry(uint256 tokenId) external view returns (uint256);
