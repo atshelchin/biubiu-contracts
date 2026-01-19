@@ -78,6 +78,9 @@ import {ITokenSweep, Wallet} from "src/interfaces/ITokenSweep.sol";
 ## Development
 
 ```bash
+# Setup (enable frozen file protection)
+git config core.hooksPath .githooks
+
 # Build
 forge build
 
