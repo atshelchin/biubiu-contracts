@@ -357,10 +357,10 @@ contract LPTokenArbitrageDemo is Script {
         // 这是 Injection 的第一个演示点：处理购买返回的动态数量
         IChainedExecutor.Injection[] memory injectionsForRemoveLP = new IChainedExecutor.Injection[](1);
         injectionsForRemoveLP[0] = IChainedExecutor.Injection({
-            sourceCallIndex: 1,       // 从 Call 1 (buyLP) 取返回值
-            sourceReturnOffset: 0,    // lpAmount
-            sourceReturnLength: 32,   // uint256 长度
-            targetCalldataOffset: 4   // removeLiquidity(uint256) 的第一个参数
+            sourceCallIndex: 1, // 从 Call 1 (buyLP) 取返回值
+            sourceReturnOffset: 0, // lpAmount
+            sourceReturnLength: 32, // uint256 长度
+            targetCalldataOffset: 4 // removeLiquidity(uint256) 的第一个参数
         });
 
         calls[2] = IChainedExecutor.Call({
@@ -374,10 +374,10 @@ contract LPTokenArbitrageDemo is Script {
         // 这里用 Injection 将 Call 2 的返回值 amount0 (WETH) 注入到 approve 金额!
         IChainedExecutor.Injection[] memory injectionsForApprove = new IChainedExecutor.Injection[](1);
         injectionsForApprove[0] = IChainedExecutor.Injection({
-            sourceCallIndex: 2,        // 从 Call 2 (removeLiquidity) 取返回值
-            sourceReturnOffset: 0,     // 返回值第一个 uint256 (amount0 = WETH)
-            sourceReturnLength: 32,    // uint256 长度
-            targetCalldataOffset: 36   // approve(address,uint256) 中 amount 参数的位置
+            sourceCallIndex: 2, // 从 Call 2 (removeLiquidity) 取返回值
+            sourceReturnOffset: 0, // 返回值第一个 uint256 (amount0 = WETH)
+            sourceReturnLength: 32, // uint256 长度
+            targetCalldataOffset: 36 // approve(address,uint256) 中 amount 参数的位置
         });
 
         calls[3] = IChainedExecutor.Call({
@@ -391,10 +391,10 @@ contract LPTokenArbitrageDemo is Script {
         // 使用 Injection 将 Call 2 的 amount0 (WETH) 注入到 swap 金额!
         IChainedExecutor.Injection[] memory injectionsForSwap = new IChainedExecutor.Injection[](1);
         injectionsForSwap[0] = IChainedExecutor.Injection({
-            sourceCallIndex: 2,       // 从 Call 2 取返回值
-            sourceReturnOffset: 0,    // amount0 (WETH)
-            sourceReturnLength: 32,   // uint256 长度
-            targetCalldataOffset: 4   // swapWETHForUSDC(uint256) 的第一个参数
+            sourceCallIndex: 2, // 从 Call 2 取返回值
+            sourceReturnOffset: 0, // amount0 (WETH)
+            sourceReturnLength: 32, // uint256 长度
+            targetCalldataOffset: 4 // swapWETHForUSDC(uint256) 的第一个参数
         });
 
         calls[4] = IChainedExecutor.Call({
@@ -430,9 +430,8 @@ contract LPTokenArbitrageDemo is Script {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // 闪电贷回调数据
-        bytes memory callbackData = abi.encodeWithSelector(
-            ChainedExecutor.executeSigned.selector, calls, currentNonce, deadline, signature
-        );
+        bytes memory callbackData =
+            abi.encodeWithSelector(ChainedExecutor.executeSigned.selector, calls, currentNonce, deadline, signature);
 
         // ========== 执行套利 ==========
         console.log("");

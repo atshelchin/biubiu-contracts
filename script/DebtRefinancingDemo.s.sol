@@ -59,7 +59,7 @@ contract MockLendingProtocolA {
 
     struct Position {
         uint256 collateral; // WETH 抵押
-        uint256 debt;       // USDC 债务
+        uint256 debt; // USDC 债务
     }
 
     mapping(address => Position) public positions;
@@ -362,10 +362,10 @@ contract DebtRefinancingDemo is Script {
         // 使用 Injection 注入 Call 1 返回的 collateralReleased!
         IChainedExecutor.Injection[] memory injectionsForApproveWETH = new IChainedExecutor.Injection[](1);
         injectionsForApproveWETH[0] = IChainedExecutor.Injection({
-            sourceCallIndex: 1,       // 从 Call 1 (repay) 取返回值
-            sourceReturnOffset: 0,    // collateralReleased
+            sourceCallIndex: 1, // 从 Call 1 (repay) 取返回值
+            sourceReturnOffset: 0, // collateralReleased
             sourceReturnLength: 32,
-            targetCalldataOffset: 36  // approve(address,uint256) 的 amount 位置
+            targetCalldataOffset: 36 // approve(address,uint256) 的 amount 位置
         });
 
         calls[2] = IChainedExecutor.Call({
@@ -382,7 +382,7 @@ contract DebtRefinancingDemo is Script {
             sourceCallIndex: 1,
             sourceReturnOffset: 0,
             sourceReturnLength: 32,
-            targetCalldataOffset: 4   // deposit(uint256) 的参数位置
+            targetCalldataOffset: 4 // deposit(uint256) 的参数位置
         });
 
         calls[3] = IChainedExecutor.Call({
@@ -418,9 +418,8 @@ contract DebtRefinancingDemo is Script {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // 闪电贷回调数据
-        bytes memory callbackData = abi.encodeWithSelector(
-            ChainedExecutor.executeSigned.selector, calls, currentNonce, deadline, signature
-        );
+        bytes memory callbackData =
+            abi.encodeWithSelector(ChainedExecutor.executeSigned.selector, calls, currentNonce, deadline, signature);
 
         // ========== 执行债务重组 ==========
         console.log("");

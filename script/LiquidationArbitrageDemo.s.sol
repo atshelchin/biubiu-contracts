@@ -316,9 +316,8 @@ contract LiquidationArbitrageDemo is Script {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // 闪电贷回调数据
-        bytes memory callbackData = abi.encodeWithSelector(
-            ChainedExecutor.executeSigned.selector, calls, currentNonce, deadline, signature
-        );
+        bytes memory callbackData =
+            abi.encodeWithSelector(ChainedExecutor.executeSigned.selector, calls, currentNonce, deadline, signature);
 
         // ========== 执行清算套利 ==========
         console.log("");

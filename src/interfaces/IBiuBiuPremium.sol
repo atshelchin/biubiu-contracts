@@ -82,5 +82,5 @@ interface IBiuBiuPremium {
 
     // ============ Tool Proxy ============
 
-    function callTool(address target, bytes calldata data) external returns (bytes memory result);
+    function callTool(address target, bytes calldata data) external payable returns (bytes memory result);
 }

@@ -17,7 +17,7 @@ contract MockReentrancyGuard is ReentrancyGuard {
 
     function incrementWithCallback(address target) external nonReentrant {
         counter += 1;
-        (bool success, ) = target.call("");
+        (bool success,) = target.call("");
         require(success, "Callback failed");
     }
 

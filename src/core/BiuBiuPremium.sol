@@ -75,34 +75,20 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
             )
         );
 
-        return
-            string(
-                abi.encodePacked(
-                    "data:application/json;base64,",
-                    Base64.encode(bytes(json))
-                )
-            );
+        return string(abi.encodePacked("data:application/json;base64,", Base64.encode(bytes(json))));
     }
 
     // ============ ERC721 Hooks ============
 
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal override {
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal override {
         // Handle mint
         if (from == address(0)) {
             if (activeSubscription[to] == 0) {
                 activeSubscription[to] = tokenId;
                 emit Activated(to, tokenId);
             }
-            _tokenAttributes[tokenId] = TokenAttributes({
-                mintedAt: block.timestamp,
-                mintedBy: msg.sender,
-                renewalCount: 0,
-                expiry: 0
-            });
+            _tokenAttributes[tokenId] =
+                TokenAttributes({mintedAt: block.timestamp, mintedBy: msg.sender, renewalCount: 0, expiry: 0});
         }
         // Handle transfer (not mint or burn)
         else if (to != address(0)) {
@@ -123,9 +109,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         return _nextTokenId;
     }
 
-    function getSubscriptionInfo(
-        address user
-    )
+    function getSubscriptionInfo(address user)
         external
         view
         returns (bool isPremium, uint256 expiryTime, uint256 remainingTime)
@@ -137,9 +121,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         remainingTime = isPremium ? expiryTime - block.timestamp : 0;
     }
 
-    function getTokenSubscriptionInfo(
-        uint256 tokenId
-    )
+    function getTokenSubscriptionInfo(uint256 tokenId)
         external
         view
         returns (uint256 expiryTime, bool isExpired, address tokenOwner)
@@ -150,9 +132,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         isExpired = expiryTime <= block.timestamp;
     }
 
-    function getTokenAttributes(
-        uint256 tokenId
-    )
+    function getTokenAttributes(uint256 tokenId)
         external
         view
         returns (uint256 mintedAt, address mintedBy, uint256 renewalCount, uint256 expiry)
@@ -166,11 +146,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         return _tokenAttributes[tokenId].expiry;
     }
 
-    function subscribe(
-        SubscriptionTier tier,
-        address referrer,
-        address recipient
-    ) external payable nonReentrant {
+    function subscribe(SubscriptionTier tier, address referrer, address recipient) external payable nonReentrant {
         address to = recipient == address(0) ? msg.sender : recipient;
         uint256 activeTokenId = activeSubscription[to];
 
@@ -183,11 +159,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         }
     }
 
-    function subscribeToToken(
-        uint256 tokenId,
-        SubscriptionTier tier,
-        address referrer
-    ) external payable nonReentrant {
+    function subscribeToToken(uint256 tokenId, SubscriptionTier tier, address referrer) external payable nonReentrant {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
         _renewSubscription(tokenId, tier, referrer);
     }
@@ -198,11 +170,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         emit Activated(msg.sender, tokenId);
     }
 
-    function _renewSubscription(
-        uint256 tokenId,
-        SubscriptionTier tier,
-        address referrer
-    ) private {
+    function _renewSubscription(uint256 tokenId, SubscriptionTier tier, address referrer) private {
         if (_owners[tokenId] == address(0)) revert TokenNotExists();
 
         (uint256 price, uint256 duration) = _getTierInfo(tier);
@@ -210,9 +178,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
 
         TokenAttributes storage attrs = _tokenAttributes[tokenId];
         uint256 currentExpiry = attrs.expiry;
-        uint256 newExpiry = currentExpiry > block.timestamp
-            ? currentExpiry + duration
-            : block.timestamp + duration;
+        uint256 newExpiry = currentExpiry > block.timestamp ? currentExpiry + duration : block.timestamp + duration;
         attrs.expiry = newExpiry;
 
         unchecked {
@@ -223,9 +189,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         if (referrer != address(0) && referrer != msg.sender) {
             referralAmount = msg.value >> 1;
             // forge-lint: disable-next-line(unchecked-call)
-            (bool success, ) = payable(referrer).call{value: referralAmount}(
-                ""
-            );
+            (bool success,) = payable(referrer).call{value: referralAmount}("");
             if (success) {
                 emit ReferralPaid(referrer, referralAmount);
             } else {
@@ -236,19 +200,10 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         // forge-lint: disable-next-line(unchecked-call)
         payable(VAULT).call{value: address(this).balance}("");
 
-        emit Subscribed(
-            msg.sender,
-            tokenId,
-            tier,
-            newExpiry,
-            referrer,
-            referralAmount
-        );
+        emit Subscribed(msg.sender, tokenId, tier, newExpiry, referrer, referralAmount);
     }
 
-    function _getTierInfo(
-        SubscriptionTier tier
-    ) private pure returns (uint256 price, uint256 duration) {
+    function _getTierInfo(SubscriptionTier tier) private pure returns (uint256 price, uint256 duration) {
         if (tier == SubscriptionTier.Monthly) {
             return (MONTHLY_PRICE, MONTHLY_DURATION);
         } else {
@@ -258,15 +213,9 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
 
     // ============ Tool Proxy ============
 
-    function callTool(
-        address target,
-        bytes calldata data
-    ) external nonReentrant returns (bytes memory result) {
+    function callTool(address target, bytes calldata data) external payable nonReentrant returns (bytes memory result) {
         uint256 activeTokenId = activeSubscription[msg.sender];
-        if (
-            activeTokenId == 0 ||
-            _tokenAttributes[activeTokenId].expiry <= block.timestamp
-        ) {
+        if (activeTokenId == 0 || _tokenAttributes[activeTokenId].expiry <= block.timestamp) {
             revert NotPremiumMember();
         }
 
@@ -274,7 +223,7 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
         if (target == address(0)) revert InvalidTarget();
 
         bool success;
-        (success, result) = target.call(data);
+        (success, result) = target.call{value: msg.value}(data);
 
         if (!success) {
             if (result.length > 0) {
@@ -290,62 +239,57 @@ contract BiuBiuPremium is ERC721Base, IBiuBiuPremium, ReentrancyGuard {
 
     // ============ Internal Helpers ============
 
-    function _generateSVG(
-        uint256 tokenId,
-        bool isActive
-    ) private pure returns (string memory) {
+    function _generateSVG(uint256 tokenId, bool isActive) private pure returns (string memory) {
         string memory tokenIdStr = Strings.toString(tokenId);
 
         if (isActive) {
-            return
-                string(
-                    abi.encodePacked(
-                        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">',
-                        "<defs>",
-                        '<linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">',
-                        '<stop offset="0%" style="stop-color:#1a1a2e"/>',
-                        '<stop offset="100%" style="stop-color:#16213e"/>',
-                        "</linearGradient>",
-                        '<linearGradient id="active" x1="0%" y1="0%" x2="100%" y2="0%">',
-                        '<stop offset="0%" style="stop-color:#00d9ff"/>',
-                        '<stop offset="100%" style="stop-color:#00ff88"/>',
-                        "</linearGradient>",
-                        "</defs>",
-                        '<rect width="400" height="400" fill="url(#bg)"/>',
-                        '<rect x="20" y="20" width="360" height="360" rx="20" fill="none" stroke="url(#active)" stroke-width="3"/>',
-                        '<text x="200" y="120" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="24" font-weight="bold">BiuBiu Premium</text>',
-                        '<text x="200" y="200" text-anchor="middle" fill="url(#active)" font-family="Arial, sans-serif" font-size="72" font-weight="bold">#',
-                        tokenIdStr,
-                        "</text>",
-                        '<rect x="130" y="260" width="140" height="36" rx="18" fill="url(#active)"/>',
-                        '<text x="200" y="285" text-anchor="middle" fill="#1a1a2e" font-family="Arial, sans-serif" font-size="16" font-weight="bold">ACTIVE</text>',
-                        '<text x="200" y="340" text-anchor="middle" fill="#888888" font-family="Arial, sans-serif" font-size="12">biubiu.tools</text>',
-                        "</svg>"
-                    )
-                );
+            return string(
+                abi.encodePacked(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">',
+                    "<defs>",
+                    '<linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">',
+                    '<stop offset="0%" style="stop-color:#1a1a2e"/>',
+                    '<stop offset="100%" style="stop-color:#16213e"/>',
+                    "</linearGradient>",
+                    '<linearGradient id="active" x1="0%" y1="0%" x2="100%" y2="0%">',
+                    '<stop offset="0%" style="stop-color:#00d9ff"/>',
+                    '<stop offset="100%" style="stop-color:#00ff88"/>',
+                    "</linearGradient>",
+                    "</defs>",
+                    '<rect width="400" height="400" fill="url(#bg)"/>',
+                    '<rect x="20" y="20" width="360" height="360" rx="20" fill="none" stroke="url(#active)" stroke-width="3"/>',
+                    '<text x="200" y="120" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="24" font-weight="bold">BiuBiu Premium</text>',
+                    '<text x="200" y="200" text-anchor="middle" fill="url(#active)" font-family="Arial, sans-serif" font-size="72" font-weight="bold">#',
+                    tokenIdStr,
+                    "</text>",
+                    '<rect x="130" y="260" width="140" height="36" rx="18" fill="url(#active)"/>',
+                    '<text x="200" y="285" text-anchor="middle" fill="#1a1a2e" font-family="Arial, sans-serif" font-size="16" font-weight="bold">ACTIVE</text>',
+                    '<text x="200" y="340" text-anchor="middle" fill="#888888" font-family="Arial, sans-serif" font-size="12">biubiu.tools</text>',
+                    "</svg>"
+                )
+            );
         } else {
-            return
-                string(
-                    abi.encodePacked(
-                        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">',
-                        "<defs>",
-                        '<linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">',
-                        '<stop offset="0%" style="stop-color:#1a1a2e"/>',
-                        '<stop offset="100%" style="stop-color:#16213e"/>',
-                        "</linearGradient>",
-                        "</defs>",
-                        '<rect width="400" height="400" fill="url(#bg)"/>',
-                        '<rect x="20" y="20" width="360" height="360" rx="20" fill="none" stroke="#555555" stroke-width="3"/>',
-                        '<text x="200" y="120" text-anchor="middle" fill="#888888" font-family="Arial, sans-serif" font-size="24" font-weight="bold">BiuBiu Premium</text>',
-                        '<text x="200" y="200" text-anchor="middle" fill="#555555" font-family="Arial, sans-serif" font-size="72" font-weight="bold">#',
-                        tokenIdStr,
-                        "</text>",
-                        '<rect x="130" y="260" width="140" height="36" rx="18" fill="#555555"/>',
-                        '<text x="200" y="285" text-anchor="middle" fill="#1a1a2e" font-family="Arial, sans-serif" font-size="16" font-weight="bold">EXPIRED</text>',
-                        '<text x="200" y="340" text-anchor="middle" fill="#555555" font-family="Arial, sans-serif" font-size="12">biubiu.tools</text>',
-                        "</svg>"
-                    )
-                );
+            return string(
+                abi.encodePacked(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">',
+                    "<defs>",
+                    '<linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">',
+                    '<stop offset="0%" style="stop-color:#1a1a2e"/>',
+                    '<stop offset="100%" style="stop-color:#16213e"/>',
+                    "</linearGradient>",
+                    "</defs>",
+                    '<rect width="400" height="400" fill="url(#bg)"/>',
+                    '<rect x="20" y="20" width="360" height="360" rx="20" fill="none" stroke="#555555" stroke-width="3"/>',
+                    '<text x="200" y="120" text-anchor="middle" fill="#888888" font-family="Arial, sans-serif" font-size="24" font-weight="bold">BiuBiu Premium</text>',
+                    '<text x="200" y="200" text-anchor="middle" fill="#555555" font-family="Arial, sans-serif" font-size="72" font-weight="bold">#',
+                    tokenIdStr,
+                    "</text>",
+                    '<rect x="130" y="260" width="140" height="36" rx="18" fill="#555555"/>',
+                    '<text x="200" y="285" text-anchor="middle" fill="#1a1a2e" font-family="Arial, sans-serif" font-size="16" font-weight="bold">EXPIRED</text>',
+                    '<text x="200" y="340" text-anchor="middle" fill="#555555" font-family="Arial, sans-serif" font-size="12">biubiu.tools</text>',
+                    "</svg>"
+                )
+            );
         }
     }
 }

@@ -197,7 +197,7 @@ contract MultiHopArbitrageDemo is Script {
 
         // 路径 1: ETH -> USDC -> DAI -> ETH
         uint256 path1_step1 = uniswap.getAmountOut(initialWETH, true); // WETH -> USDC
-        uint256 path1_step2 = curve.getAmountOut(path1_step1, true);   // USDC -> DAI
+        uint256 path1_step2 = curve.getAmountOut(path1_step1, true); // USDC -> DAI
         uint256 path1_step3 = balancer.getAmountOut(path1_step2, true); // DAI -> WETH
 
         console.log("Path 1: WETH -> USDC -> DAI -> WETH");
@@ -206,8 +206,8 @@ contract MultiHopArbitrageDemo is Script {
         console.log("  Step 3 (Balancer): DAI ->", path1_step3);
 
         // 路径 2: ETH -> USDC -> WBTC -> ETH (对比)
-        uint256 path2_step1 = uniswap.getAmountOut(initialWETH, true);    // WETH -> USDC
-        uint256 path2_step2 = sushiswap.getAmountOut(path2_step1, true);  // USDC -> WBTC
+        uint256 path2_step1 = uniswap.getAmountOut(initialWETH, true); // WETH -> USDC
+        uint256 path2_step2 = sushiswap.getAmountOut(path2_step1, true); // USDC -> WBTC
         uint256 path2_step3 = pancakeswap.getAmountOut(path2_step2, true); // WBTC -> WETH
 
         console.log("");
@@ -312,7 +312,9 @@ contract MultiHopArbitrageDemo is Script {
         console.log("=== Path Comparison ===");
         console.log("Path 1 output:", path1_step3, "WETH");
         console.log("Path 2 output:", path2_step3, "WETH");
-        console.log("Difference:", path1_step3 > path2_step3 ? path1_step3 - path2_step3 : path2_step3 - path1_step3, "WETH");
+        console.log(
+            "Difference:", path1_step3 > path2_step3 ? path1_step3 - path2_step3 : path2_step3 - path1_step3, "WETH"
+        );
 
         console.log("");
         console.log("=== Key Insights ===");

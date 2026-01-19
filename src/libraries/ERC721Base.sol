@@ -36,9 +36,9 @@ abstract contract ERC721Base is IERC721 {
 
     function supportsInterface(bytes4 interfaceId) public pure virtual returns (bool) {
         return
-            interfaceId == 0x80ac58cd || // ERC721
-            interfaceId == 0x5b5e139f || // ERC721Metadata
-            interfaceId == 0x01ffc9a7;   // ERC165
+            interfaceId == 0x80ac58cd // ERC721
+                || interfaceId == 0x5b5e139f // ERC721Metadata
+                || interfaceId == 0x01ffc9a7; // ERC165
     }
 
     function totalSupply() public view virtual returns (uint256) {
@@ -90,12 +90,7 @@ abstract contract ERC721Base is IERC721 {
         safeTransferFrom(from, to, tokenId, "");
     }
 
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) public virtual {
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public virtual {
         if (!_isApprovedOrOwner(msg.sender, tokenId)) revert NotApproved();
         _transfer(from, to, tokenId);
         if (!_checkOnERC721Received(from, to, tokenId, data)) {
@@ -170,12 +165,11 @@ abstract contract ERC721Base is IERC721 {
         _afterTokenTransfer(owner, address(0), tokenId);
     }
 
-    function _checkOnERC721Received(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) internal virtual returns (bool) {
+    function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory data)
+        internal
+        virtual
+        returns (bool)
+    {
         if (to.code.length == 0) return true;
         try IERC721Receiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 retval) {
             return retval == IERC721Receiver.onERC721Received.selector;
