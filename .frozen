@@ -1,10 +1,11 @@
 # Frozen Contracts - DO NOT MODIFY
 # These files have been audited and tested. Any changes require re-audit.
 # Audited: 2026-01-19
-# Tests: 212 passing (BiuBiuPremium: 119, ERC721Base: 53, ReentrancyGuard: 10, Base64: 11, Strings: 19)
+# Tests: 250 passing (BiuBiuPremium: 119, ERC721Base: 53, ReentrancyGuard: 10, Base64: 11, Strings: 19, WETH: 38)
 
 # Core Contracts
 src/core/BiuBiuPremium.sol
+src/core/WETH.sol
 
 # Core Libraries
 src/libraries/ERC721Base.sol
@@ -16,9 +17,11 @@ src/libraries/Strings.sol
 src/interfaces/IERC721.sol
 src/interfaces/IERC721Receiver.sol
 src/interfaces/IBiuBiuPremium.sol
+src/interfaces/IWETH.sol
 
 # Core Tests
 test/BiuBiuPremium.t.sol
+test/WETH.t.sol
 
 # Library Tests
 test/libraries/ERC721Base.t.sol
