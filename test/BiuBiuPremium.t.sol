@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {BiuBiuPremium} from "../src/core/BiuBiuPremium.sol";
 import {IBiuBiuPremium} from "../src/interfaces/IBiuBiuPremium.sol";
+import {ReentrancyGuard} from "../src/libraries/ReentrancyGuard.sol";
 
 // Tool contract imports for integration testing
 import {TokenFactory} from "../src/tools/TokenFactory.sol";
@@ -1593,7 +1594,7 @@ contract BiuBiuPremiumTest is Test {
         // Call reentrant tool - it will try to call callTool again
         // The inner callTool should fail with ReentrancyDetected
         vm.prank(user1);
-        vm.expectRevert(IBiuBiuPremium.ReentrancyDetected.selector);
+        vm.expectRevert(ReentrancyGuard.ReentrancyDetected.selector);
         premium.callTool(address(reentrantTool), abi.encodeWithSignature("triggerReentry()"));
     }
 

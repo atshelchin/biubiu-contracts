@@ -9,7 +9,6 @@ pragma solidity ^0.8.20;
 interface IBiuBiuPremium {
     // ============ Custom Errors ============
 
-    error ReentrancyDetected();
     error IncorrectPaymentAmount();
     error NotTokenOwner();
     error TokenNotExists();

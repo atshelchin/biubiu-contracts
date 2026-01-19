@@ -5,6 +5,7 @@ import {IBiuBiuPremium} from "../interfaces/IBiuBiuPremium.sol";
 import {IERC721Receiver} from "../interfaces/IERC721Receiver.sol";
 import {Base64} from "../libraries/Base64.sol";
 import {Strings} from "../libraries/Strings.sol";
+import {ReentrancyGuard} from "../libraries/ReentrancyGuard.sol";
 
 /**
  * @title BiuBiuPremium
@@ -12,7 +13,7 @@ import {Strings} from "../libraries/Strings.sol";
  * @dev Subscription info is bound to NFT tokenId. Users can hold multiple NFTs but only activate one at a time.
  *      Implements ERC721 without external dependencies.
  */
-contract BiuBiuPremium is IBiuBiuPremium {
+contract BiuBiuPremium is IBiuBiuPremium, ReentrancyGuard {
     // ============ Constants & Immutables ============
 
     string public constant name = "BiuBiu Premium";
@@ -26,7 +27,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
 
     // ============ State Variables ============
 
-    uint256 private _locked = 1;
     uint256 private _nextTokenId = 1;
     uint256 private _totalSupply;
 
@@ -38,14 +38,6 @@ contract BiuBiuPremium is IBiuBiuPremium {
     mapping(uint256 => uint256) public subscriptionExpiry;
     mapping(uint256 => TokenAttributes) private _tokenAttributes;
     mapping(address => uint256) public activeSubscription;
-
-    // ============ Constructor & Modifiers ============
-    modifier nonReentrant() {
-        if (_locked != 1) revert ReentrancyDetected();
-        _locked = 2;
-        _;
-        _locked = 1;
-    }
 
     // ============ ERC721 ============
 
