@@ -32,6 +32,7 @@ polygon = "${POLYGON_RPC_URL}"
 polygon_amoy = "${POLYGON_AMOY_RPC_URL}"
 bsc = "${BSC_RPC_URL}"
 bsc_testnet = "${BSC_TESTNET_RPC_URL}"
+endurance = "${ENDURANCE_RPC_URL}"
 
 # ============ Etherscan API Keys ============
 [etherscan]
@@ -47,5 +48,6 @@ polygon = { key = "${POLYGONSCAN_API_KEY}" }
 polygon_amoy = { key = "${POLYGONSCAN_API_KEY}" }
 bsc = { key = "${BSCSCAN_API_KEY}" }
 bsc_testnet = { key = "${BSCSCAN_API_KEY}" }
+endurance = { key = "", chain = 648, url = "https://explorer-endurance.fusionist.io/api" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
