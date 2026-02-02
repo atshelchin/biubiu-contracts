@@ -4,6 +4,7 @@
 # Tests: 660 passing (BiuBiuPremium: 191, ERC721Base: 53, ReentrancyGuard: 10, Base64: 11, Strings: 19, WETH: 38)
 
 # Core Contracts
+src/core/BiuBiuPremium.sol
 src/core/WETH.sol
 
 # Core Libraries
@@ -15,9 +16,11 @@ src/libraries/Strings.sol
 # Interfaces
 src/interfaces/IERC721.sol
 src/interfaces/IERC721Receiver.sol
+src/interfaces/IBiuBiuPremium.sol
 src/interfaces/IWETH.sol
 
 # Core Tests
+test/BiuBiuPremium.t.sol
 test/WETH.t.sol
 
 # Library Tests
