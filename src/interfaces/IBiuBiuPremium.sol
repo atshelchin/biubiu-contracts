@@ -14,6 +14,13 @@ interface IBiuBiuPremium {
     error NotPremiumMember();
     error InvalidTarget();
     error CallFailed();
+    error InvalidPromoCode();
+    error PromoCodeExpired();
+    error PromoCodeMaxUsesReached();
+    error PromoCodeAlreadyUsed();
+    error PromoCodeChainNotValid();
+    error PromoCodeNotAvailable();
+    error InvalidDiscountBps();
 
     // ============ Enums ============
 
@@ -39,11 +46,17 @@ interface IBiuBiuPremium {
         SubscriptionTier tier,
         uint256 expiryTime,
         address indexed referrer,
-        uint256 referralAmount
+        uint256 referralAmount,
+        uint256 paidAmount,
+        string source,
+        string toolId,
+        bytes32 promoId,
+        uint256 discountBps
     );
     event ReferralPaid(address indexed referrer, uint256 amount);
     event Activated(address indexed user, uint256 indexed tokenId);
     event Deactivated(address indexed user, uint256 indexed tokenId);
+    event PromoCodeUsed(bytes32 indexed promoId, address indexed user, uint256 discountBps, uint256 paidAmount);
 
     // ============ Pricing ============
 
@@ -55,8 +68,22 @@ interface IBiuBiuPremium {
 
     // ============ Subscription Functions ============
 
-    function subscribe(SubscriptionTier tier, address referrer, address recipient) external payable;
-    function subscribeToToken(uint256 tokenId, SubscriptionTier tier, address referrer) external payable;
+    function subscribe(
+        SubscriptionTier tier,
+        address referrer,
+        address recipient,
+        string calldata source,
+        string calldata toolId,
+        bytes calldata promoCode
+    ) external payable;
+    function subscribeToToken(
+        uint256 tokenId,
+        SubscriptionTier tier,
+        address referrer,
+        string calldata source,
+        string calldata toolId,
+        bytes calldata promoCode
+    ) external payable;
     function activate(uint256 tokenId) external;
 
     // ============ View Functions ============
@@ -79,6 +106,34 @@ interface IBiuBiuPremium {
     function nextTokenId() external view returns (uint256);
     function subscriptionExpiry(uint256 tokenId) external view returns (uint256);
     function activeSubscription(address user) external view returns (uint256);
+
+    // ============ Tracking Stats ============
+
+    function sourceSubscribeCount(bytes32 sourceHash) external view returns (uint256);
+    function toolSubscribeCount(bytes32 toolHash) external view returns (uint256);
+    function sourceRevenue(bytes32 sourceHash) external view returns (uint256);
+    function toolRevenue(bytes32 toolHash) external view returns (uint256);
+
+    // ============ Promo Code State ============
+
+    function promoCodeUsedCount(bytes32 promoId) external view returns (uint256);
+    function promoCodeUsedBy(bytes32 promoId, address user) external view returns (bool);
+    function getDiscountedPrice(SubscriptionTier tier, uint256 discountBps) external view returns (uint256);
+    function PROMO_TYPEHASH() external view returns (bytes32);
+    function validatePromoCode(bytes calldata promoCode, address user)
+        external
+        view
+        returns (
+            bool isValid,
+            uint256 discountBps,
+            uint256 expiry,
+            uint256 maxUses,
+            bool singleUse,
+            uint256[] memory validChainIds,
+            uint256 usedCount,
+            bool usedByUser,
+            string memory reason
+        );
 
     // ============ Tool Proxy ============
 

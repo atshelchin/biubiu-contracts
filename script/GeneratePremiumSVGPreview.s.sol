@@ -20,14 +20,22 @@ contract GeneratePremiumSVGPreview is Script {
         console.log("=== BiuBiu Premium SVG Preview Generator ===");
         console.log("Contract deployed at:", address(premium));
 
+        // Set a realistic timestamp (Jan 15, 2025)
+        vm.warp(1736899200);
+
         // Create output directory
         vm.createDir("./svg-preview", true);
 
-        // Generate Active subscription NFT
+        // Generate Active subscription NFT (#1)
         _generateAndSave(premium, "active", true, address(0x1111));
 
-        // Generate Expired subscription NFT
+        // Generate Expired subscription NFT (#2)
         _generateAndSave(premium, "expired", false, address(0x2222));
+
+        // Generate Active with large token ID (#1234567890)
+        // _nextTokenId is at storage slot 6
+        vm.store(address(premium), bytes32(uint256(6)), bytes32(uint256(1234567890)));
+        _generateAndSave(premium, "active_large_id", true, address(0x3333));
 
         console.log("");
         console.log("SVG files saved to ./svg-preview/");
@@ -38,7 +46,7 @@ contract GeneratePremiumSVGPreview is Script {
         vm.deal(testUser, 10 ether);
         vm.startPrank(testUser);
         premium.subscribe{value: premium.MONTHLY_PRICE()}(
-            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0)
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
         );
         vm.stopPrank();
 

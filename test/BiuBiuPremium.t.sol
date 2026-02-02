@@ -39,8 +39,8 @@ contract BiuBiuPremiumTest is Test {
 
     // Test constants and defaults
     function testConstants() public view {
-        assertEq(premium.MONTHLY_PRICE(), 0.2 ether);
-        assertEq(premium.YEARLY_PRICE(), 0.4 ether);
+        assertEq(premium.MONTHLY_PRICE(), 0.02 ether);
+        assertEq(premium.YEARLY_PRICE(), 0.1 ether);
         assertEq(premium.MONTHLY_DURATION(), 30 days);
         assertEq(premium.YEARLY_DURATION(), 365 days);
         assertEq(premium.VAULT(), vault);
@@ -61,7 +61,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 vaultBalanceBefore = vault.balance;
         uint256 monthlyPrice = premium.MONTHLY_PRICE();
 
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Owner receives payment automatically
         assertEq(vault.balance, vaultBalanceBefore + monthlyPrice);
@@ -90,7 +90,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 referrerBalanceBefore = referrer.balance;
         uint256 monthlyPrice = premium.MONTHLY_PRICE();
 
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer, address(0), "", "", "");
 
         // Check payments split 50/50
         assertEq(vault.balance, vaultBalanceBefore + monthlyPrice / 2);
@@ -109,7 +109,7 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeYearly() public {
         vm.startPrank(user1);
 
-        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
 
         (bool isPremium, uint256 expiryTime, uint256 remainingTime) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
@@ -124,7 +124,7 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // User1 buys subscription for user2
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), user2);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), user2, "", "", "");
 
         vm.stopPrank();
 
@@ -148,14 +148,14 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeGiftRenewal() public {
         // First, user2 gets a subscription
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         uint256 firstExpiry = block.timestamp + 30 days;
         assertEq(premium.subscriptionExpiry(1), firstExpiry);
 
         // User1 gifts an extension to user2
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), user2);
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), user2, "", "", "");
 
         // User2 should still have only 1 NFT, but with extended expiry
         assertEq(premium.balanceOf(user2), 1);
@@ -167,13 +167,13 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // First subscription - mints NFT tokenId=1
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         assertEq(premium.balanceOf(user1), 1);
 
         uint256 firstExpiry = block.timestamp + 30 days;
 
         // Second subscription - renews existing NFT (no new mint)
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         assertEq(premium.balanceOf(user1), 1); // Still only 1 NFT
 
         (, uint256 expiryTime,) = premium.getSubscriptionInfo(user1);
@@ -187,7 +187,7 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // First subscription
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward past expiry (31 days for monthly)
         vm.warp(block.timestamp + 31 days);
@@ -196,7 +196,7 @@ contract BiuBiuPremiumTest is Test {
         assertFalse(isPremium);
 
         // Subscribe again - renews existing NFT
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (, uint256 newExpiry,) = premium.getSubscriptionInfo(user1);
         assertEq(newExpiry, block.timestamp + 30 days);
@@ -212,7 +212,7 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         vm.expectRevert(IBiuBiuPremium.IncorrectPaymentAmount.selector);
-        premium.subscribe{value: 0.005 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: 0.005 ether}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.stopPrank();
     }
@@ -225,7 +225,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 monthlyPrice = premium.MONTHLY_PRICE();
 
         // User1 tries to refer themselves
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, user1, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, user1, address(0), "", "", "");
 
         // Owner receives full payment (no referral commission)
         assertEq(vault.balance, vaultBalanceBefore + monthlyPrice);
@@ -249,7 +249,7 @@ contract BiuBiuPremiumTest is Test {
     function testNFTTransfer() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.activeSubscription(user1), 1);
         assertEq(premium.activeSubscription(user2), 0);
@@ -276,11 +276,11 @@ contract BiuBiuPremiumTest is Test {
     function testNFTTransferToActiveUser() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 subscribes
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.activeSubscription(user1), 1);
         assertEq(premium.activeSubscription(user2), 2);
@@ -300,7 +300,7 @@ contract BiuBiuPremiumTest is Test {
     function testActivate() public {
         // User1 subscribes twice (first creates NFT, second renews)
         vm.startPrank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Deactivate and subscribe again to get new NFT
         // We need to transfer away and get a new one
@@ -308,7 +308,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User2 subscribes to create tokenId=2
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 transfers to user1
         vm.prank(user2);
@@ -328,7 +328,7 @@ contract BiuBiuPremiumTest is Test {
     // Test activate not owner
     function testActivateNotOwner() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
         vm.expectRevert(ERC721Base.NotTokenOwner.selector);
@@ -339,13 +339,13 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeToToken() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         uint256 originalExpiry = premium.subscriptionExpiry(1);
 
         // User2 gifts more time to user1's NFT
         vm.prank(user2);
-        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", "");
 
         // Check expiry extended
         assertEq(premium.subscriptionExpiry(1), originalExpiry + 30 days);
@@ -355,13 +355,13 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeToTokenNotExists() public {
         vm.prank(user1);
         vm.expectRevert(ERC721Base.TokenNotExists.selector);
-        premium.subscribeToToken{value: monthlyPrice}(999, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribeToToken{value: monthlyPrice}(999, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", "");
     }
 
     // Test getTokenSubscriptionInfo
     function testGetTokenSubscriptionInfo() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (uint256 expiryTime, bool isExpired, address tokenOwner) = premium.getTokenSubscriptionInfo(1);
 
@@ -388,10 +388,10 @@ contract BiuBiuPremiumTest is Test {
 
         vm.expectEmit(true, true, true, true);
         emit IBiuBiuPremium.Subscribed(
-            user1, 1, IBiuBiuPremium.SubscriptionTier.Monthly, block.timestamp + 30 days, referrer, referralAmount
+            user1, 1, IBiuBiuPremium.SubscriptionTier.Monthly, block.timestamp + 30 days, referrer, referralAmount, monthlyPrice, "", "", bytes32(0), 0
         );
 
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer, address(0), "", "", "");
 
         vm.stopPrank();
     }
@@ -406,7 +406,7 @@ contract BiuBiuPremiumTest is Test {
         // When attacker receives referral payment, it will try to reenter
         // With the new implementation, referrer payment failure doesn't block subscription
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(attacker), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(attacker), address(0), "", "", "");
 
         // The subscription SHOULD succeed even if referrer payment failed
         // This is the optimized behavior - don't let malicious referrers block subscriptions
@@ -418,11 +418,11 @@ contract BiuBiuPremiumTest is Test {
     function testMultipleUsers() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 subscribes
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Check both subscriptions
         (bool isPremium1,,) = premium.getSubscriptionInfo(user1);
@@ -441,7 +441,7 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.nextTokenId(), 1);
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.nextTokenId(), 2);
     }
@@ -449,7 +449,7 @@ contract BiuBiuPremiumTest is Test {
     // Test ERC721 approval
     function testApproval() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         premium.approve(user2, 1);
@@ -466,7 +466,7 @@ contract BiuBiuPremiumTest is Test {
     // Test setApprovalForAll
     function testApprovalForAll() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         premium.setApprovalForAll(user2, true);
@@ -485,7 +485,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 mintTime = block.timestamp;
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (uint256 mintedAt, address mintedBy, uint256 renewalCount,) = premium.getTokenAttributes(1);
 
@@ -499,19 +499,19 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // First subscription - mints NFT with renewalCount = 1
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (,, uint256 count1,) = premium.getTokenAttributes(1);
         assertEq(count1, 1);
 
         // Second subscription - renews existing, renewalCount = 2
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (,, uint256 count2,) = premium.getTokenAttributes(1);
         assertEq(count2, 2);
 
         // Third subscription - renewalCount = 3
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (,, uint256 count3,) = premium.getTokenAttributes(1);
         assertEq(count3, 3);
@@ -531,7 +531,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User1 subscribes (mints NFT)
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Transfer to user2
         vm.prank(user1);
@@ -546,7 +546,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User2 renews - renewalCount increases
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2's active token is now token 1 (auto-activated on transfer)
         (, address mintedBy2, uint256 count2,) = premium.getTokenAttributes(1);
@@ -558,14 +558,14 @@ contract BiuBiuPremiumTest is Test {
     function testGetTokenAttributesGiftRenewal() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         (,, uint256 count1,) = premium.getTokenAttributes(1);
         assertEq(count1, 1);
 
         // User2 gifts more time via subscribeToToken
         vm.prank(user2);
-        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", "");
 
         (,, uint256 count2,) = premium.getTokenAttributes(1);
         assertEq(count2, 2); // Gift also counts as renewal
@@ -576,18 +576,18 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.totalSupply(), 0);
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.totalSupply(), 1);
 
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.totalSupply(), 2);
 
         // Renewal should not increase totalSupply
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.totalSupply(), 2);
     }
@@ -601,7 +601,7 @@ contract BiuBiuPremiumTest is Test {
     // Test tokenURI returns valid base64 JSON
     function testTokenURI() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         string memory uri = premium.tokenURI(1);
 
@@ -629,7 +629,7 @@ contract BiuBiuPremiumTest is Test {
 
         vm.prank(user1);
         // Subscribe with rejecter as referrer - should succeed but no ReferralPaid event
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(rejecter), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(rejecter), address(0), "", "", "");
 
         // Subscription should still succeed
         (bool isPremium,,) = premium.getSubscriptionInfo(user1);
@@ -659,7 +659,7 @@ contract BiuBiuPremiumTest is Test {
     // Test approve to self reverts
     function testApproveToSelf() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         vm.expectRevert(ERC721Base.InvalidAddress.selector);
@@ -669,7 +669,7 @@ contract BiuBiuPremiumTest is Test {
     // Test approve by non-owner/non-approved reverts
     function testApproveNotAuthorized() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
         vm.expectRevert(ERC721Base.NotApproved.selector);
@@ -686,7 +686,7 @@ contract BiuBiuPremiumTest is Test {
     // Test safeTransferFrom (without data)
     function testSafeTransferFrom() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         premium.safeTransferFrom(user1, user2, 1);
@@ -698,7 +698,7 @@ contract BiuBiuPremiumTest is Test {
     // Test safeTransferFrom (with data)
     function testSafeTransferFromWithData() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         premium.safeTransferFrom(user1, user2, 1, "test data");
@@ -709,7 +709,7 @@ contract BiuBiuPremiumTest is Test {
     // Test safeTransferFrom to contract that rejects
     function testSafeTransferFromToNonReceiver() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // RejectingContract doesn't implement onERC721Received
         RejectingContract nonReceiver = new RejectingContract();
@@ -722,7 +722,7 @@ contract BiuBiuPremiumTest is Test {
     // Test transferFrom to zero address reverts
     function testTransferToZeroAddress() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         vm.expectRevert(ERC721Base.InvalidAddress.selector);
@@ -732,7 +732,7 @@ contract BiuBiuPremiumTest is Test {
     // Test transferFrom with wrong 'from' address
     function testTransferFromWrongFrom() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         vm.expectRevert(ERC721Base.NotTokenOwner.selector);
@@ -758,7 +758,7 @@ contract BiuBiuPremiumTest is Test {
         vm.deal(address(receiver), 1 ether);
 
         vm.prank(address(receiver));
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.ownerOf(1), address(receiver));
     }
@@ -766,7 +766,7 @@ contract BiuBiuPremiumTest is Test {
     // Test operator can transfer via approval
     function testOperatorTransfer() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User1 sets user2 as operator
         vm.prank(user1);
@@ -782,7 +782,7 @@ contract BiuBiuPremiumTest is Test {
     // Test approval is cleared after transfer
     function testApprovalClearedAfterTransfer() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         premium.approve(referrer, 1);
@@ -802,7 +802,7 @@ contract BiuBiuPremiumTest is Test {
     function testActiveSubscriptionAfterTransferAndNewSubscribe() public {
         // User1 subscribes, gets token 1
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         assertEq(premium.activeSubscription(user1), 1);
 
         // Transfer token 1 to user2
@@ -814,7 +814,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User1 subscribes again - should get NEW token 2
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.activeSubscription(user1), 2);
         assertEq(premium.ownerOf(2), user1);
@@ -827,7 +827,7 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeRenewsActiveTokenEvenIfExpired() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward past expiry (31 days for monthly)
         vm.warp(block.timestamp + 31 days);
@@ -839,7 +839,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User1 subscribes again - should RENEW token 1, not mint new
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Still only 1 token
         assertEq(premium.balanceOf(user1), 1);
@@ -852,11 +852,11 @@ contract BiuBiuPremiumTest is Test {
     function testComplexTransferPattern() public {
         // User1 subscribes -> token 1
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 subscribes -> token 2
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User1 transfers token 1 to user2 (user2 already has active = 2)
         vm.prank(user1);
@@ -868,7 +868,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User1 subscribes again -> gets token 3
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.activeSubscription(user1), 3);
         assertEq(premium.balanceOf(user1), 1);
@@ -885,7 +885,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(rejecter), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(rejecter), address(0), "", "", "");
 
         // Subscription succeeds
         (bool isPremium,,) = premium.getSubscriptionInfo(user1);
@@ -900,7 +900,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Vault gets full amount
         assertEq(vault.balance, vaultBalanceBefore + monthlyPrice);
@@ -911,12 +911,12 @@ contract BiuBiuPremiumTest is Test {
         vm.startPrank(user1);
 
         // Subscribe for yearly (365 days)
-        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
         uint256 firstExpiry = premium.subscriptionExpiry(1);
         assertEq(firstExpiry, block.timestamp + 365 days);
 
         // Extend with daily (1 day) - should add to existing expiry
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         uint256 secondExpiry = premium.subscriptionExpiry(1);
         assertEq(secondExpiry, firstExpiry + 30 days);
 
@@ -926,7 +926,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Subscription renewal after expiry - starts from block.timestamp
     function testExpiryRenewalAfterExpiry() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward 10 days past expiry (31 days for monthly + 10 days)
         vm.warp(block.timestamp + 40 days);
@@ -934,7 +934,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 renewTime = block.timestamp;
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // New expiry should be from current time, not from old expiry
         uint256 newExpiry = premium.subscriptionExpiry(1);
@@ -944,12 +944,12 @@ contract BiuBiuPremiumTest is Test {
     // Test: Large expiry value (far future) - no overflow
     function testLargeExpiryNoOverflow() public {
         vm.prank(user1);
-        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
 
         // Renew many times - should accumulate without overflow
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(user1);
-            premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+            premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
         }
 
         // 11 yearly subscriptions = 11 * 365 days
@@ -965,7 +965,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Vault should receive accumulated balance + subscription fee
         assertEq(vault.balance, vaultBalanceBefore + 1 ether + monthlyPrice);
@@ -987,11 +987,11 @@ contract BiuBiuPremiumTest is Test {
     function testMultipleNFTsRenewalOnlyAffectsActive() public {
         // User1 subscribes -> token 1 (auto-activated)
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 subscribes -> token 2, then transfers to user1
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         vm.prank(user2);
         premium.transferFrom(user2, user1, 2);
 
@@ -1004,7 +1004,7 @@ contract BiuBiuPremiumTest is Test {
 
         // User1 renews (affects active token 1)
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Token 1 expiry extended
         assertEq(premium.subscriptionExpiry(1), token1Expiry + 30 days);
@@ -1015,7 +1015,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Deactivated event emitted on transfer
     function testDeactivatedEventOnTransfer() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         vm.expectEmit(true, true, false, true);
@@ -1026,7 +1026,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Activated event emitted when receiver has no active subscription
     function testActivatedEventOnTransferToNewUser() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         vm.expectEmit(true, true, false, true);
@@ -1038,11 +1038,11 @@ contract BiuBiuPremiumTest is Test {
     function testNoActivatedEventWhenReceiverHasActive() public {
         // User1 subscribes -> token 1
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 subscribes -> token 2
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Transfer token 1 to user2 - should NOT emit Activated for user2
         // (only Deactivated for user1)
@@ -1056,11 +1056,11 @@ contract BiuBiuPremiumTest is Test {
     // Test: subscribeToToken doesn't change ownership or activation
     function testSubscribeToTokenDoesNotAffectOwnership() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User2 gifts subscription to token 1 (owned by user1)
         vm.prank(user2);
-        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", "");
 
         // Ownership unchanged
         assertEq(premium.ownerOf(1), user1);
@@ -1074,7 +1074,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Activate to tokenId you don't own fails
     function testActivateTokenNotOwned() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
         vm.expectRevert(ERC721Base.NotTokenOwner.selector);
@@ -1091,27 +1091,27 @@ contract BiuBiuPremiumTest is Test {
     function testSubscribeToTokenZero() public {
         vm.prank(user1);
         vm.expectRevert(ERC721Base.TokenNotExists.selector);
-        premium.subscribeToToken{value: monthlyPrice}(0, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribeToToken{value: monthlyPrice}(0, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", "");
     }
 
     // Test: Overpayment should revert
     function testOverpaymentReverts() public {
         vm.prank(user1);
         vm.expectRevert(IBiuBiuPremium.IncorrectPaymentAmount.selector);
-        premium.subscribe{value: monthlyPrice + 1 wei}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice + 1 wei}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
     }
 
     // Test: Underpayment should revert
     function testUnderpaymentReverts() public {
         vm.prank(user1);
         vm.expectRevert(IBiuBiuPremium.IncorrectPaymentAmount.selector);
-        premium.subscribe{value: monthlyPrice - 1 wei}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice - 1 wei}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
     }
 
     // Test: transferFrom not approved should revert
     function testTransferFromNotApproved() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
         vm.expectRevert(ERC721Base.NotApproved.selector);
@@ -1121,7 +1121,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: safeTransferFrom not approved should revert
     function testSafeTransferFromNotApproved() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
         vm.expectRevert(ERC721Base.NotApproved.selector);
@@ -1147,7 +1147,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Operator can approve on behalf of owner
     function testOperatorCanApprove() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user1);
         premium.setApprovalForAll(user2, true);
@@ -1169,7 +1169,7 @@ contract BiuBiuPremiumTest is Test {
         else price = yearlyPrice;
 
         vm.prank(user1);
-        premium.subscribe{value: price}(tier, address(0), address(0));
+        premium.subscribe{value: price}(tier, address(0), address(0), "", "", "");
 
         (bool isPremium,,) = premium.getSubscriptionInfo(user1);
         assertTrue(isPremium);
@@ -1186,7 +1186,7 @@ contract BiuBiuPremiumTest is Test {
     function testGetSubscriptionInfoAfterTransferAllTokens() public {
         // User1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Transfer to user2
         vm.prank(user1);
@@ -1208,29 +1208,29 @@ contract BiuBiuPremiumTest is Test {
         assertEq(premium.nextTokenId(), 1);
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         assertEq(premium.nextTokenId(), 2);
 
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         assertEq(premium.nextTokenId(), 3);
 
         // Renewal doesn't increment tokenId
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         assertEq(premium.nextTokenId(), 3); // Still 3
     }
 
     // Test: subscribeToToken with user's own token (should work same as subscribe)
     function testSubscribeToTokenOwnToken() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         uint256 expiryBefore = premium.subscriptionExpiry(1);
 
         // User renews their own token via subscribeToToken
         vm.prank(user1);
-        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0));
+        premium.subscribeToToken{value: monthlyPrice}(1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", "");
 
         assertEq(premium.subscriptionExpiry(1), expiryBefore + 30 days);
     }
@@ -1238,7 +1238,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Transfer to self (should work but no-op on activeSubscription)
     function testTransferToSelf() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Transfer to self
         vm.prank(user1);
@@ -1256,7 +1256,7 @@ contract BiuBiuPremiumTest is Test {
         vm.deal(address(receiver), 1 ether);
 
         vm.prank(address(receiver));
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.ownerOf(1), address(receiver));
         assertEq(premium.activeSubscription(address(receiver)), 1);
@@ -1267,7 +1267,7 @@ contract BiuBiuPremiumTest is Test {
         uint256 vaultBalanceBefore = vault.balance;
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, vault, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, vault, address(0), "", "", "");
 
         // Vault gets 50% as referral + rest as regular payment = 100%
         assertEq(vault.balance, vaultBalanceBefore + monthlyPrice);
@@ -1278,14 +1278,14 @@ contract BiuBiuPremiumTest is Test {
         vm.prank(user1);
         vm.expectRevert(ERC721Base.TokenNotExists.selector);
         premium.subscribeToToken{value: monthlyPrice}(
-            type(uint256).max, IBiuBiuPremium.SubscriptionTier.Monthly, address(0)
+            type(uint256).max, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", ""
         );
     }
 
     // Test: Activate already active token (no-op)
     function testActivateAlreadyActiveToken() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         assertEq(premium.activeSubscription(user1), 1);
 
@@ -1304,13 +1304,13 @@ contract BiuBiuPremiumTest is Test {
         vm.deal(user3, 10 ether);
 
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user3);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // All should have same mintedAt (same block)
         (uint256 mintedAt1,,,) = premium.getTokenAttributes(1);
@@ -1325,7 +1325,7 @@ contract BiuBiuPremiumTest is Test {
     // Test: Subscription expiry edge case - exactly at block.timestamp
     function testExpiryExactlyAtBlockTimestamp() public {
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Warp to exactly expiry time
         vm.warp(block.timestamp + 30 days);
@@ -1342,15 +1342,15 @@ contract BiuBiuPremiumTest is Test {
     function testBalanceOfAfterMultipleOperations() public {
         // User1 subscribes twice (second time renews, no new mint)
         vm.startPrank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         vm.stopPrank();
 
         assertEq(premium.balanceOf(user1), 1);
 
         // User2 subscribes
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Transfer token 2 to user1
         vm.prank(user2);
@@ -1376,14 +1376,14 @@ contract BiuBiuPremiumTest is Test {
         uint256 referrerBalanceBefore = referrer.balance;
 
         // Test with amount to ensure bit shift works correctly
-        // monthlyPrice = 0.2 ether = 200000000000000000 wei
-        // 200000000000000000 >> 1 = 100000000000000000 (correct 50%)
+        // monthlyPrice = 0.02 ether = 20000000000000000 wei
+        // 20000000000000000 >> 1 = 10000000000000000 (correct 50%)
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer, address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, referrer, address(0), "", "", "");
 
         uint256 expectedReferral = monthlyPrice >> 1;
         assertEq(referrer.balance, referrerBalanceBefore + expectedReferral);
-        assertEq(expectedReferral, 0.1 ether);
+        assertEq(expectedReferral, 0.01 ether);
     }
 
     // ============ callTool Tests ============
@@ -1404,7 +1404,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes, gets token 1
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Transfer token away, activeSubscription becomes 0
         vm.prank(user1);
@@ -1424,7 +1424,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward past expiry (30 days exactly = expired)
         vm.warp(block.timestamp + 30 days);
@@ -1445,7 +1445,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward to 1 second before expiry
         vm.warp(block.timestamp + 30 days - 1);
@@ -1461,7 +1461,7 @@ contract BiuBiuPremiumTest is Test {
     function testCallToolToSelf() public {
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Try to call premium contract itself
         vm.prank(user1);
@@ -1473,7 +1473,7 @@ contract BiuBiuPremiumTest is Test {
     function testCallToolToZeroAddress() public {
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Try to call zero address
         vm.prank(user1);
@@ -1487,7 +1487,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call setValue and check return
         vm.prank(user1);
@@ -1506,7 +1506,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call getMultipleValues
         vm.prank(user1);
@@ -1524,7 +1524,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call noReturn
         vm.prank(user1);
@@ -1543,7 +1543,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call getSender
         vm.prank(user1);
@@ -1560,7 +1560,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call revertWithMessage - should bubble up the revert
         vm.prank(user1);
@@ -1574,7 +1574,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call revertWithRequire
         vm.prank(user1);
@@ -1588,7 +1588,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call revertWithCustomError - should bubble up custom error
         vm.prank(user1);
@@ -1602,7 +1602,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call revertWithoutReason - should get CallFailed
         vm.prank(user1);
@@ -1616,7 +1616,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call revertWithEmptyReason
         vm.prank(user1);
@@ -1632,7 +1632,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call reentrant tool - it will try to call callTool again
         // The inner callTool should fail with ReentrancyDetected
@@ -1645,7 +1645,7 @@ contract BiuBiuPremiumTest is Test {
     function testCallToolToEOA() public {
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call to EOA (user2) - low-level call to EOA returns success
         // but with the calldata we sent (not empty)
@@ -1664,7 +1664,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call with empty data - triggers fallback
         vm.prank(user1);
@@ -1681,7 +1681,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call with empty data to contract without fallback - should revert
         vm.prank(user1);
@@ -1695,7 +1695,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Get 1000 bytes of data
         vm.prank(user1);
@@ -1716,7 +1716,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call multiple times
         vm.startPrank(user1);
@@ -1739,10 +1739,10 @@ contract BiuBiuPremiumTest is Test {
 
         // Both users subscribe
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User1 calls
         vm.prank(user1);
@@ -1763,14 +1763,14 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward 25 days
         vm.warp(block.timestamp + 25 days);
 
         // Renew
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward another 10 days (now 35 days from start, but renewed)
         vm.warp(block.timestamp + 10 days);
@@ -1787,7 +1787,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes yearly
         vm.prank(user1);
-        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
 
         // Fast forward 300 days
         vm.warp(block.timestamp + 300 days);
@@ -1804,7 +1804,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call nonexistent function - MockTool has no fallback, so it reverts
         vm.prank(user1);
@@ -1818,7 +1818,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call nonexistent function - FallbackTool has fallback, so it succeeds
         vm.prank(user1);
@@ -1835,7 +1835,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         uint256 premiumBalanceBefore = premium.balanceOf(user1);
         uint256 premiumTotalSupplyBefore = premium.totalSupply();
@@ -1858,11 +1858,11 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes - gets token 1
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // user2 subscribes - gets token 2
         vm.prank(user2);
-        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
 
         // user2 transfers token 2 to user1
         vm.prank(user2);
@@ -1895,7 +1895,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call with moderate gas consumption
         vm.prank(user1);
@@ -1913,7 +1913,7 @@ contract BiuBiuPremiumTest is Test {
 
         // user1 subscribes
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Call with fuzzed value
         vm.prank(user1);
@@ -1925,6 +1925,1412 @@ contract BiuBiuPremiumTest is Test {
 
         // Check stored value
         assertEq(tool.lastValue(), value);
+    }
+
+    // ============================================================
+    // Helper functions for promo code and tracking tests
+    // ============================================================
+
+    /// @dev Build promo code bytes for testing. Uses a dummy 65-byte signature
+    ///      because MockEIP1271Wallet accepts anything when not rejecting.
+    function _buildPromoCode(
+        uint256 discountBps,
+        uint256 expiry,
+        uint256 maxUses,
+        bool singleUse,
+        uint256[] memory validChainIds
+    ) internal pure returns (bytes memory) {
+        // Use a dummy 65-byte signature (MockEIP1271 accepts anything)
+        bytes memory signature = new bytes(65);
+        return abi.encode(discountBps, expiry, maxUses, singleUse, validChainIds, signature);
+    }
+
+    /// @dev Deploy MockEIP1271Wallet (accepting) at VAULT address
+    function _deployMockEIP1271AtVault() internal {
+        MockEIP1271Wallet mock = new MockEIP1271Wallet();
+        vm.etch(vault, address(mock).code);
+    }
+
+    /// @dev Deploy MockEIP1271Wallet (rejecting) at VAULT address
+    function _deployRejectingMockAtVault() internal {
+        MockEIP1271Wallet mock = new MockEIP1271Wallet();
+        mock.setShouldReject(true);
+        vm.etch(vault, address(mock).code);
+        // Also copy storage for shouldReject=true
+        vm.store(vault, bytes32(uint256(0)), bytes32(uint256(1)));
+    }
+
+    // ============================================================
+    // Tracking Tests
+    // ============================================================
+
+    // 1. testTrackingSourceCount
+    function testTrackingSourceCount() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "",
+            ""
+        );
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+        assertEq(premium.sourceSubscribeCount(sourceHash), 1);
+    }
+
+    // 2. testTrackingToolCount
+    function testTrackingToolCount() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "token-factory",
+            ""
+        );
+        bytes32 toolHash = keccak256("token-factory");
+        assertEq(premium.toolSubscribeCount(toolHash), 1);
+    }
+
+    // 3. testTrackingSourceRevenue
+    function testTrackingSourceRevenue() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "",
+            ""
+        );
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+        assertEq(premium.sourceRevenue(sourceHash), monthlyPrice);
+    }
+
+    // 4. testTrackingToolRevenue
+    function testTrackingToolRevenue() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "token-factory",
+            ""
+        );
+        bytes32 toolHash = keccak256("token-factory");
+        assertEq(premium.toolRevenue(toolHash), monthlyPrice);
+    }
+
+    // 5. testTrackingMultipleSubscriptions
+    function testTrackingMultipleSubscriptions() public {
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(user1);
+            premium.subscribe{value: monthlyPrice}(
+                IBiuBiuPremium.SubscriptionTier.Monthly,
+                address(0),
+                address(0),
+                "https://biubiu.tools",
+                "",
+                ""
+            );
+        }
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+        assertEq(premium.sourceSubscribeCount(sourceHash), 3);
+        assertEq(premium.sourceRevenue(sourceHash), 3 * monthlyPrice);
+    }
+
+    // 6. testTrackingEmptySource
+    function testTrackingEmptySource() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "token-factory",
+            ""
+        );
+        // Empty source should not increment
+        bytes32 emptySourceHash = keccak256("");
+        assertEq(premium.sourceSubscribeCount(emptySourceHash), 0);
+    }
+
+    // 7. testTrackingEmptyTool
+    function testTrackingEmptyTool() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "",
+            ""
+        );
+        // Empty toolId should not increment
+        bytes32 emptyToolHash = keccak256("");
+        assertEq(premium.toolSubscribeCount(emptyToolHash), 0);
+    }
+
+    // 8. testTrackingDifferentSourcesIndependent
+    function testTrackingDifferentSourcesIndependent() public {
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "source-a",
+            "",
+            ""
+        );
+
+        vm.prank(user2);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "source-b",
+            "",
+            ""
+        );
+
+        assertEq(premium.sourceSubscribeCount(keccak256("source-a")), 1);
+        assertEq(premium.sourceSubscribeCount(keccak256("source-b")), 1);
+    }
+
+    // 9. testTrackingEventEmitsSourceAndTool
+    function testTrackingEventEmitsSourceAndTool() public {
+        vm.prank(user1);
+        vm.expectEmit(true, true, true, true);
+        emit IBiuBiuPremium.Subscribed(
+            user1,
+            1,
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            block.timestamp + 30 days,
+            address(0),
+            0,
+            monthlyPrice,
+            "https://biubiu.tools",
+            "token-factory",
+            bytes32(0),
+            0
+        );
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "token-factory",
+            ""
+        );
+    }
+
+    // ============================================================
+    // Promo Code Tests
+    // ============================================================
+
+    // 10. testPromoCode50PercentOff
+    function testPromoCode50PercentOff() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000; // 50% off
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        // Verify subscription was created with correct discounted price
+        assertEq(premium.balanceOf(user1), 1);
+        assertEq(premium.ownerOf(1), user1);
+        (bool isPremium,,) = premium.getSubscriptionInfo(user1);
+        assertTrue(isPremium);
+    }
+
+    // 11. testPromoCode10PercentOff
+    function testPromoCode10PercentOff() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(1000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 9000 / 10000; // 10% off
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+        assertEq(premium.balanceOf(user1), 1);
+    }
+
+    // 12. testPromoCodeMinimumDiscount
+    function testPromoCodeMinimumDiscount() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(1, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 9999 / 10000; // 0.01% off
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+        assertEq(premium.balanceOf(user1), 1);
+    }
+
+    // 13. testPromoCodeMaximumDiscount
+    function testPromoCodeMaximumDiscount() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(9999, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 1 / 10000; // 99.99% off
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+        assertEq(premium.balanceOf(user1), 1);
+    }
+
+    // 14. testPromoCodeInvalidDiscountZero
+    function testPromoCodeInvalidDiscountZero() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(0, 0, 0, false, chainIds);
+
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.InvalidDiscountBps.selector);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 15. testPromoCodeInvalidDiscount10000
+    function testPromoCodeInvalidDiscount10000() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(10000, 0, 0, false, chainIds);
+
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.InvalidDiscountBps.selector);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 16. testPromoCodeExpired
+    function testPromoCodeExpired() public {
+        _deployMockEIP1271AtVault();
+
+        // Warp to a reasonable timestamp so block.timestamp - 1 is not 0
+        vm.warp(1000);
+
+        uint256[] memory chainIds = new uint256[](0);
+        // Expiry in the past
+        bytes memory promoCode = _buildPromoCode(5000, block.timestamp - 1, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.PromoCodeExpired.selector);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 17. testPromoCodeNotExpiredZeroExpiry
+    function testPromoCodeNotExpiredZeroExpiry() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        // expiry=0 means never expires
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        // Warp far into the future
+        vm.warp(block.timestamp + 3650 days);
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+        assertEq(premium.balanceOf(user1), 1);
+    }
+
+    // 18. testPromoCodeMaxUsesReached
+    function testPromoCodeMaxUsesReached() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 2, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        // Use 1
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        // Use 2
+        vm.prank(user2);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        // Use 3 - should revert
+        address user3 = address(0x4);
+        vm.deal(user3, 100 ether);
+        vm.prank(user3);
+        vm.expectRevert(IBiuBiuPremium.PromoCodeMaxUsesReached.selector);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 19. testPromoCodeSingleUsePerAddress
+    function testPromoCodeSingleUsePerAddress() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, true, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        // First use by user1
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        // Second use by same user1 - should revert
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.PromoCodeAlreadyUsed.selector);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 20. testPromoCodeSingleUseDifferentAddress
+    function testPromoCodeSingleUseDifferentAddress() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, true, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        // user1 uses the code
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        // user2 should also be able to use it (singleUse is per-address)
+        vm.prank(user2);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        assertEq(premium.balanceOf(user1), 1);
+        assertEq(premium.balanceOf(user2), 1);
+    }
+
+    // 21. testPromoCodeChainNotValid
+    function testPromoCodeChainNotValid() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](1);
+        chainIds[0] = 99999; // Some other chain
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.PromoCodeChainNotValid.selector);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 22. testPromoCodeChainValidMultiple
+    function testPromoCodeChainValidMultiple() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](3);
+        chainIds[0] = 1;
+        chainIds[1] = block.chainid; // Current chain
+        chainIds[2] = 56;
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+        assertEq(premium.balanceOf(user1), 1);
+    }
+
+    // 23. testPromoCodeEmptyChainIdsAllChains
+    function testPromoCodeEmptyChainIdsAllChains() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0); // Empty = all chains
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+        assertEq(premium.balanceOf(user1), 1);
+    }
+
+    // 24. testPromoCodeInvalidSignature
+    function testPromoCodeInvalidSignature() public {
+        _deployRejectingMockAtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.InvalidPromoCode.selector);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 25. testPromoCodeVaultNotDeployed
+    function testPromoCodeVaultNotDeployed() public {
+        // Do NOT deploy mock at vault - vault has no code
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        vm.expectRevert(IBiuBiuPremium.PromoCodeNotAvailable.selector);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 26. testPromoCodeWithReferral
+    function testPromoCodeWithReferral() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+        // Referral is 50% of the discounted price
+        uint256 expectedReferral = discountedPrice >> 1;
+
+        uint256 referrerBalBefore = referrer.balance;
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            referrer,
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+
+        assertEq(referrer.balance - referrerBalBefore, expectedReferral);
+    }
+
+    // 27. testPromoCodeWithTracking
+    function testPromoCodeWithTracking() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "token-factory",
+            promoCode
+        );
+
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+        bytes32 toolHash = keccak256("token-factory");
+
+        // Revenue should track the discounted amount
+        assertEq(premium.sourceRevenue(sourceHash), discountedPrice);
+        assertEq(premium.toolRevenue(toolHash), discountedPrice);
+        assertEq(premium.sourceSubscribeCount(sourceHash), 1);
+        assertEq(premium.toolSubscribeCount(toolHash), 1);
+    }
+
+    // 28. testPromoCodeEventEmission
+    function testPromoCodeEventEmission() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        // We expect PromoCodeUsed event to be emitted
+        vm.expectEmit(true, true, false, true);
+        // Compute the expected promoId (structHash)
+        bytes32 promoTypehash = keccak256(
+            "PromoCode(uint256 discountBps,uint256 expiry,uint256 maxUses,bool singleUse,uint256[] validChainIds)"
+        );
+        bytes32 expectedPromoId = keccak256(
+            abi.encode(promoTypehash, uint256(5000), uint256(0), uint256(0), false, keccak256(abi.encodePacked(chainIds)))
+        );
+        emit IBiuBiuPremium.PromoCodeUsed(expectedPromoId, user1, 5000, discountedPrice);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 29. testPromoCodeSubscribedEventIncludesPromoFields
+    function testPromoCodeSubscribedEventIncludesPromoFields() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        // Compute expected promoId
+        bytes32 promoTypehash = keccak256(
+            "PromoCode(uint256 discountBps,uint256 expiry,uint256 maxUses,bool singleUse,uint256[] validChainIds)"
+        );
+        bytes32 expectedPromoId = keccak256(
+            abi.encode(promoTypehash, uint256(5000), uint256(0), uint256(0), false, keccak256(abi.encodePacked(chainIds)))
+        );
+
+        vm.prank(user1);
+        vm.expectEmit(true, true, true, true);
+        emit IBiuBiuPremium.Subscribed(
+            user1,
+            1,
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            block.timestamp + 30 days,
+            address(0),
+            0,
+            discountedPrice,
+            "",
+            "",
+            expectedPromoId,
+            5000
+        );
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "",
+            "",
+            promoCode
+        );
+    }
+
+    // 30. testValidatePromoCodeValid
+    function testValidatePromoCodeValid() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+
+        (
+            bool isValid,
+            uint256 discountBps,
+            uint256 expiry,
+            uint256 maxUses,
+            bool singleUse,
+            uint256[] memory validChainIds,
+            uint256 usedCount,
+            bool usedByUser,
+            string memory reason
+        ) = premium.validatePromoCode(promoCode, user1);
+
+        assertTrue(isValid);
+        assertEq(discountBps, 5000);
+        assertEq(expiry, 0);
+        assertEq(maxUses, 0);
+        assertFalse(singleUse);
+        assertEq(validChainIds.length, 0);
+        assertEq(usedCount, 0);
+        assertFalse(usedByUser);
+        assertEq(reason, "valid");
+    }
+
+    // 31. testValidatePromoCodeExpired
+    function testValidatePromoCodeExpired() public {
+        _deployMockEIP1271AtVault();
+
+        // Warp to a reasonable timestamp so block.timestamp - 1 is not 0
+        vm.warp(1000);
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, block.timestamp - 1, 0, false, chainIds);
+
+        (bool isValid,,,,,,,,string memory reason) = premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(reason, "expired");
+    }
+
+    // 32. testValidatePromoCodeVaultNotDeployed
+    function testValidatePromoCodeVaultNotDeployed() public {
+        // Don't deploy mock - vault has no code
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+
+        (bool isValid,,,,,,,,string memory reason) = premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(reason, "vault not deployed on this chain");
+    }
+
+    // 33. testGetDiscountedPrice
+    function testGetDiscountedPrice() public view {
+        // 50% off monthly
+        uint256 discounted = premium.getDiscountedPrice(IBiuBiuPremium.SubscriptionTier.Monthly, 5000);
+        assertEq(discounted, monthlyPrice * 5000 / 10000);
+
+        // 10% off yearly
+        uint256 discountedYearly = premium.getDiscountedPrice(IBiuBiuPremium.SubscriptionTier.Yearly, 1000);
+        assertEq(discountedYearly, yearlyPrice * 9000 / 10000);
+
+        // 0 bps returns full price
+        uint256 noop = premium.getDiscountedPrice(IBiuBiuPremium.SubscriptionTier.Monthly, 0);
+        assertEq(noop, monthlyPrice);
+
+        // 10000 bps returns full price (invalid, no discount applied)
+        uint256 invalid = premium.getDiscountedPrice(IBiuBiuPremium.SubscriptionTier.Monthly, 10000);
+        assertEq(invalid, monthlyPrice);
+    }
+
+    // ============================================================
+    // Additional Coverage: validatePromoCode Return Value Tests
+    // ============================================================
+
+    function testValidatePromoCodeInvalidDiscountReturnsAllFields() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(0, 0, 0, false, chainIds);
+
+        (
+            bool isValid,
+            uint256 discountBps,
+            uint256 expiry,
+            uint256 maxUses,
+            bool singleUse,
+            uint256[] memory validChainIds,
+            uint256 usedCount,
+            bool usedByUser,
+            string memory reason
+        ) = premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(discountBps, 0);
+        assertEq(expiry, 0);
+        assertEq(maxUses, 0);
+        assertFalse(singleUse);
+        assertEq(validChainIds.length, 0);
+        assertEq(usedCount, 0);
+        assertFalse(usedByUser);
+        assertEq(reason, "invalid discount bps");
+    }
+
+    function testValidatePromoCodeOverLimitDiscountReturnsAllFields() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](2);
+        chainIds[0] = 1;
+        chainIds[1] = 56;
+        bytes memory promoCode = _buildPromoCode(10000, 9999, 5, true, chainIds);
+
+        (
+            bool isValid,
+            uint256 discountBps,
+            uint256 expiry,
+            uint256 maxUses,
+            bool singleUse,
+            uint256[] memory validChainIds,
+            uint256 usedCount,
+            bool usedByUser,
+            string memory reason
+        ) = premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(discountBps, 10000);
+        assertEq(expiry, 9999);
+        assertEq(maxUses, 5);
+        assertTrue(singleUse);
+        assertEq(validChainIds.length, 2);
+        assertEq(validChainIds[0], 1);
+        assertEq(validChainIds[1], 56);
+        assertEq(usedCount, 0);
+        assertFalse(usedByUser);
+        assertEq(reason, "invalid discount bps");
+    }
+
+    function testValidatePromoCodeInvalidSignatureReturnsAllFields() public {
+        _deployRejectingMockAtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 10, true, chainIds);
+
+        (
+            bool isValid,
+            uint256 discountBps,
+            uint256 expiry,
+            uint256 maxUses,
+            bool singleUse,
+            uint256[] memory validChainIds,
+            uint256 usedCount,
+            bool usedByUser,
+            string memory reason
+        ) = premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(discountBps, 5000);
+        assertEq(expiry, 0);
+        assertEq(maxUses, 10);
+        assertTrue(singleUse);
+        assertEq(validChainIds.length, 0);
+        assertEq(usedCount, 0);
+        assertFalse(usedByUser);
+        assertEq(reason, "invalid signature");
+    }
+
+    function testValidatePromoCodeChainNotValidReturnsAllFields() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](2);
+        chainIds[0] = 99999;
+        chainIds[1] = 88888;
+        bytes memory promoCode = _buildPromoCode(3000, 0, 0, false, chainIds);
+
+        (
+            bool isValid,
+            uint256 discountBps,,
+            uint256 maxUses,
+            bool singleUse,
+            uint256[] memory validChainIds,,,
+            string memory reason
+        ) = premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(discountBps, 3000);
+        assertEq(maxUses, 0);
+        assertFalse(singleUse);
+        assertEq(validChainIds.length, 2);
+        assertEq(validChainIds[0], 99999);
+        assertEq(validChainIds[1], 88888);
+        assertEq(reason, "chain not valid");
+    }
+
+    function testValidatePromoCodeReturnsUsedCountAfterUses() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 5, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+        vm.prank(user2);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+
+        (bool isValid,,,,,,uint256 usedCount, bool usedByUser, string memory reason) =
+            premium.validatePromoCode(promoCode, user1);
+
+        assertTrue(isValid);
+        assertEq(usedCount, 2);
+        assertFalse(usedByUser); // singleUse=false, usedBy not tracked
+        assertEq(reason, "valid");
+    }
+
+    function testValidatePromoCodeMaxUsesReachedReturnsAllFields() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 1, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+
+        (bool isValid, uint256 discountBps,, uint256 maxUses,,, uint256 usedCount,, string memory reason) =
+            premium.validatePromoCode(promoCode, user2);
+
+        assertFalse(isValid);
+        assertEq(discountBps, 5000);
+        assertEq(maxUses, 1);
+        assertEq(usedCount, 1);
+        assertEq(reason, "max uses reached");
+    }
+
+    function testValidatePromoCodeAlreadyUsedByUserReturnsAllFields() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, true, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+
+        (bool isValid,,,,,,uint256 usedCount, bool usedByUser, string memory reason) =
+            premium.validatePromoCode(promoCode, user1);
+
+        assertFalse(isValid);
+        assertEq(usedCount, 1);
+        assertTrue(usedByUser);
+        assertEq(reason, "already used by user");
+    }
+
+    // ============================================================
+    // Additional Coverage: subscribeToToken + Promo Code Tests
+    // ============================================================
+
+    function testSubscribeToTokenWithPromoCode() public {
+        _deployMockEIP1271AtVault();
+
+        // Create token 1
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
+        );
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = yearlyPrice * 5000 / 10000;
+
+        // Renew token 1 via subscribeToToken with promo code
+        vm.prank(user2);
+        premium.subscribeToToken{value: discountedPrice}(
+            1, IBiuBiuPremium.SubscriptionTier.Yearly, address(0), "", "", promoCode
+        );
+
+        // Verify subscription was extended (30 days remaining + 365 days)
+        (uint256 expiryTime, bool isExpired,) = premium.getTokenSubscriptionInfo(1);
+        assertFalse(isExpired);
+        assertEq(expiryTime, block.timestamp + 30 days + 365 days);
+    }
+
+    function testSubscribeToTokenWithPromoCodeAndReferral() public {
+        _deployMockEIP1271AtVault();
+
+        // Create token 1
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
+        );
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+        uint256 expectedReferral = discountedPrice >> 1;
+
+        uint256 referrerBalBefore = referrer.balance;
+
+        vm.prank(user2);
+        premium.subscribeToToken{value: discountedPrice}(
+            1, IBiuBiuPremium.SubscriptionTier.Monthly, referrer, "https://biubiu.tools", "token-factory", promoCode
+        );
+
+        assertEq(referrer.balance - referrerBalBefore, expectedReferral);
+        assertEq(premium.sourceSubscribeCount(keccak256("https://biubiu.tools")), 1);
+        assertEq(premium.toolSubscribeCount(keccak256("token-factory")), 1);
+        assertEq(premium.sourceRevenue(keccak256("https://biubiu.tools")), discountedPrice);
+    }
+
+    function testSubscribeToTokenWithInvalidPromoCodeReverts() public {
+        // Create token 1 (vault is EOA, receives ETH fine)
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
+        );
+
+        // Now deploy rejecting mock at vault
+        _deployRejectingMockAtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user2);
+        vm.expectRevert(IBiuBiuPremium.InvalidPromoCode.selector);
+        premium.subscribeToToken{value: discountedPrice}(
+            1, IBiuBiuPremium.SubscriptionTier.Monthly, address(0), "", "", promoCode
+        );
+    }
+
+    // ============================================================
+    // Additional Coverage: callTool ETH Forwarding Tests
+    // ============================================================
+
+    function testCallToolForwardsETH() public {
+        PayableTool tool = new PayableTool();
+
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
+        );
+
+        uint256 ethAmount = 1 ether;
+        vm.prank(user1);
+        bytes memory result = premium.callTool{value: ethAmount}(
+            address(tool), abi.encodeWithSignature("payableAction()")
+        );
+
+        uint256 returnedValue = abi.decode(result, (uint256));
+        assertEq(returnedValue, ethAmount);
+        assertEq(tool.lastReceivedValue(), ethAmount);
+        assertEq(address(tool).balance, ethAmount);
+    }
+
+    function testCallToolForwardsZeroETH() public {
+        PayableTool tool = new PayableTool();
+
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
+        );
+
+        vm.prank(user1);
+        bytes memory result = premium.callTool(
+            address(tool), abi.encodeWithSignature("payableAction()")
+        );
+
+        uint256 returnedValue = abi.decode(result, (uint256));
+        assertEq(returnedValue, 0);
+        assertEq(address(tool).balance, 0);
+    }
+
+    function testCallToolForwardsExactETHAmount() public {
+        PayableTool tool = new PayableTool();
+
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", ""
+        );
+
+        uint256 ethAmount = 0.123456789 ether;
+        vm.prank(user1);
+        bytes memory result = premium.callTool{value: ethAmount}(
+            address(tool), abi.encodeWithSignature("payableAction()")
+        );
+
+        uint256 returnedValue = abi.decode(result, (uint256));
+        assertEq(returnedValue, ethAmount);
+        assertEq(tool.lastReceivedValue(), ethAmount);
+    }
+
+    // ============================================================
+    // Additional Coverage: Full Combination Test
+    // ============================================================
+
+    function testFullCombinationSubscribe() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](1);
+        chainIds[0] = block.chainid;
+        bytes memory promoCode = _buildPromoCode(3000, 0, 100, true, chainIds);
+        uint256 discountedPrice = monthlyPrice * 7000 / 10000; // 30% off
+
+        uint256 referrerBalBefore = referrer.balance;
+        uint256 expectedReferral = discountedPrice >> 1;
+
+        // Compute expected promoId
+        bytes32 promoTypehash = keccak256(
+            "PromoCode(uint256 discountBps,uint256 expiry,uint256 maxUses,bool singleUse,uint256[] validChainIds)"
+        );
+        bytes32 expectedPromoId = keccak256(
+            abi.encode(
+                promoTypehash, uint256(3000), uint256(0), uint256(100), true, keccak256(abi.encodePacked(chainIds))
+            )
+        );
+
+        vm.prank(user1);
+        vm.expectEmit(true, true, true, true);
+        emit IBiuBiuPremium.Subscribed(
+            user1,
+            1,
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            block.timestamp + 30 days,
+            referrer,
+            expectedReferral,
+            discountedPrice,
+            "https://partner.com",
+            "nft-factory",
+            expectedPromoId,
+            3000
+        );
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            referrer,
+            address(0),
+            "https://partner.com",
+            "nft-factory",
+            promoCode
+        );
+
+        // Verify subscription
+        assertEq(premium.balanceOf(user1), 1);
+        (bool isPremium, uint256 expiryTime,) = premium.getSubscriptionInfo(user1);
+        assertTrue(isPremium);
+        assertEq(expiryTime, block.timestamp + 30 days);
+
+        // Verify referral
+        assertEq(referrer.balance - referrerBalBefore, expectedReferral);
+
+        // Verify tracking stats
+        bytes32 sourceHash = keccak256("https://partner.com");
+        bytes32 toolHash = keccak256("nft-factory");
+        assertEq(premium.sourceSubscribeCount(sourceHash), 1);
+        assertEq(premium.toolSubscribeCount(toolHash), 1);
+        assertEq(premium.sourceRevenue(sourceHash), discountedPrice);
+        assertEq(premium.toolRevenue(toolHash), discountedPrice);
+
+        // Verify promo code usage
+        assertEq(premium.promoCodeUsedCount(expectedPromoId), 1);
+        assertTrue(premium.promoCodeUsedBy(expectedPromoId, user1));
+    }
+
+    // ============================================================
+    // Additional Coverage: promoCodeUsedCount/promoCodeUsedBy State
+    // ============================================================
+
+    function testPromoCodeUsedCountIncrements() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        bytes32 promoTypehash = premium.PROMO_TYPEHASH();
+        bytes32 promoId = keccak256(
+            abi.encode(promoTypehash, uint256(5000), uint256(0), uint256(0), false, keccak256(abi.encodePacked(chainIds)))
+        );
+
+        assertEq(premium.promoCodeUsedCount(promoId), 0);
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+        assertEq(premium.promoCodeUsedCount(promoId), 1);
+
+        vm.prank(user2);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+        assertEq(premium.promoCodeUsedCount(promoId), 2);
+
+        // user1 can use again (not singleUse)
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+        assertEq(premium.promoCodeUsedCount(promoId), 3);
+    }
+
+    function testPromoCodeUsedBySingleUseTracking() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, true, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        bytes32 promoTypehash = premium.PROMO_TYPEHASH();
+        bytes32 promoId = keccak256(
+            abi.encode(promoTypehash, uint256(5000), uint256(0), uint256(0), true, keccak256(abi.encodePacked(chainIds)))
+        );
+
+        // Initially not used
+        assertFalse(premium.promoCodeUsedBy(promoId, user1));
+        assertFalse(premium.promoCodeUsedBy(promoId, user2));
+
+        // user1 uses the code
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+        assertTrue(premium.promoCodeUsedBy(promoId, user1));
+        assertFalse(premium.promoCodeUsedBy(promoId, user2));
+
+        // user2 uses the code
+        vm.prank(user2);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+        assertTrue(premium.promoCodeUsedBy(promoId, user1));
+        assertTrue(premium.promoCodeUsedBy(promoId, user2));
+    }
+
+    function testPromoCodeUsedByNotSetWhenNotSingleUse() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        bytes32 promoTypehash = premium.PROMO_TYPEHASH();
+        bytes32 promoId = keccak256(
+            abi.encode(
+                promoTypehash, uint256(5000), uint256(0), uint256(0), false, keccak256(abi.encodePacked(chainIds))
+            )
+        );
+
+        vm.prank(user1);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", promoCode
+        );
+
+        // usedBy NOT set since singleUse=false
+        assertFalse(premium.promoCodeUsedBy(promoId, user1));
+        // But usedCount still increments
+        assertEq(premium.promoCodeUsedCount(promoId), 1);
+    }
+
+    // ============================================================
+    // Additional Coverage: Tracking Stats with Discounted Price
+    // ============================================================
+
+    function testTrackingStatsWithDiscountedPriceMultiplePromos() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+
+        // First subscription with 50% off
+        bytes memory promo50 = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 price50 = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user1);
+        premium.subscribe{value: price50}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "token-factory",
+            promo50
+        );
+
+        // Second subscription with 20% off
+        bytes memory promo20 = _buildPromoCode(2000, 0, 0, false, chainIds);
+        uint256 price20 = monthlyPrice * 8000 / 10000;
+
+        vm.prank(user2);
+        premium.subscribe{value: price20}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "token-factory",
+            promo20
+        );
+
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+        bytes32 toolHash = keccak256("token-factory");
+
+        // Revenue should be sum of discounted prices
+        assertEq(premium.sourceRevenue(sourceHash), price50 + price20);
+        assertEq(premium.toolRevenue(toolHash), price50 + price20);
+        assertEq(premium.sourceSubscribeCount(sourceHash), 2);
+        assertEq(premium.toolSubscribeCount(toolHash), 2);
+    }
+
+    function testTrackingStatsFullPriceVsDiscounted() public {
+        _deployMockEIP1271AtVault();
+
+        uint256[] memory chainIds = new uint256[](0);
+
+        // First subscription at full price (no promo)
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "",
+            ""
+        );
+
+        // Second subscription at discounted price
+        bytes memory promo50 = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = monthlyPrice * 5000 / 10000;
+
+        vm.prank(user2);
+        premium.subscribe{value: discountedPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "",
+            promo50
+        );
+
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+
+        // Revenue is full price + discounted price
+        assertEq(premium.sourceRevenue(sourceHash), monthlyPrice + discountedPrice);
+        assertEq(premium.sourceSubscribeCount(sourceHash), 2);
+    }
+
+    function testTrackingStatsSubscribeToTokenWithDiscount() public {
+        _deployMockEIP1271AtVault();
+
+        // Create token via subscribe
+        vm.prank(user1);
+        premium.subscribe{value: monthlyPrice}(
+            IBiuBiuPremium.SubscriptionTier.Monthly,
+            address(0),
+            address(0),
+            "https://biubiu.tools",
+            "token-factory",
+            ""
+        );
+
+        // Renew via subscribeToToken with promo code
+        uint256[] memory chainIds = new uint256[](0);
+        bytes memory promoCode = _buildPromoCode(5000, 0, 0, false, chainIds);
+        uint256 discountedPrice = yearlyPrice * 5000 / 10000;
+
+        vm.prank(user2);
+        premium.subscribeToToken{value: discountedPrice}(
+            1,
+            IBiuBiuPremium.SubscriptionTier.Yearly,
+            address(0),
+            "https://biubiu.tools",
+            "token-factory",
+            promoCode
+        );
+
+        bytes32 sourceHash = keccak256("https://biubiu.tools");
+        bytes32 toolHash = keccak256("token-factory");
+
+        assertEq(premium.sourceSubscribeCount(sourceHash), 2);
+        assertEq(premium.toolSubscribeCount(toolHash), 2);
+        // Revenue: full monthly + discounted yearly
+        assertEq(premium.sourceRevenue(sourceHash), monthlyPrice + discountedPrice);
+        assertEq(premium.toolRevenue(toolHash), monthlyPrice + discountedPrice);
     }
 }
 
@@ -1977,7 +3383,7 @@ contract ReentrancyAttacker {
         if (!_attacked && address(this).balance >= monthlyPrice) {
             _attacked = true;
             // Try to reenter - should fail with "Reentrancy detected"
-            premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+            premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
         }
     }
 }
@@ -2141,7 +3547,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
 
         // Subscribe user1 as premium member
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
     }
 
     // ============ TokenFactory.createTokenFree Tests ============
@@ -2423,7 +3829,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
     function testCallToolMultiplePremiumMembers() public {
         // Subscribe user2 as premium member
         vm.prank(user2);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // User1 creates a token
         vm.prank(user1);
@@ -2468,7 +3874,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
 
         // Renew subscription
         vm.prank(user1);
-        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0));
+        premium.subscribe{value: monthlyPrice}(IBiuBiuPremium.SubscriptionTier.Monthly, address(0), address(0), "", "", "");
 
         // Fast forward another 10 days (now 35 days from start, but still valid)
         vm.warp(block.timestamp + 10 days);
@@ -2551,7 +3957,7 @@ contract BiuBiuPremiumToolIntegrationTest is Test {
         // Subscribe user2 with yearly plan
         uint256 yearlyPrice = premium.YEARLY_PRICE();
         vm.prank(user2);
-        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0));
+        premium.subscribe{value: yearlyPrice}(IBiuBiuPremium.SubscriptionTier.Yearly, address(0), address(0), "", "", "");
 
         // Fast forward 300 days - still valid
         vm.warp(block.timestamp + 300 days);
@@ -2594,5 +4000,34 @@ contract MockERC20ForDistribution {
         balanceOf[to] += amount;
         allowance[from][msg.sender] -= amount;
         return true;
+    }
+}
+
+// Mock EIP-1271 wallet for promo code signature verification tests
+contract MockEIP1271Wallet {
+    bytes4 private constant _EIP1271_MAGIC = 0x1626ba7e;
+    bool public shouldReject;
+
+    function setShouldReject(bool _reject) external {
+        shouldReject = _reject;
+    }
+
+    /// @dev isValidSignature(bytes32 hash, bytes memory signature)
+    ///      Returns magic value when not rejecting, returns 0xffffffff otherwise.
+    function isValidSignature(bytes32, bytes memory) external view returns (bytes4) {
+        if (shouldReject) {
+            return 0xffffffff;
+        }
+        return _EIP1271_MAGIC;
+    }
+}
+
+// Mock payable tool for testing callTool ETH forwarding
+contract PayableTool {
+    uint256 public lastReceivedValue;
+
+    function payableAction() external payable returns (uint256) {
+        lastReceivedValue = msg.value;
+        return msg.value;
     }
 }
