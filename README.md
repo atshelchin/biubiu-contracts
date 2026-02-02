@@ -31,7 +31,7 @@ src/
 
 | Contract | Description |
 |----------|-------------|
-| **BiuBiuPremium** | Premium membership subscription NFT (Monthly/Yearly tiers) with referral system |
+| **BiuBiuPremium** | Premium membership subscription NFT (Monthly/Yearly tiers) with referral system, source/tool tracking, and EIP-712 + EIP-1271 promo code discounts |
 | **WETH** | Wrapped ETH with `depositAndApprove` functionality |
 
 **Revenue Vault:** `0x7602db7FbBc4f0FD7dfA2Be206B39e002A5C94cA` (Safe Wallet)
@@ -56,7 +56,7 @@ All contracts use CREATE2 for deterministic deployment addresses across any EVM 
 | Contract | Address | Note |
 |----------|---------|------|
 | WETH | `0x82f4998846624B464e0974306dE744dA50D93320` | |
-| BiuBiuPremium | `0xc44461c1e8124D314A651172a5bdC594deb28052` | |
+| BiuBiuPremium | `0x1b04e723170Dfd23E99b086dDB7C17962890aFe8` | |
 | NFTMetadata | `0x728978f21C90Ac522F872CF95B54fc59E4066c10` | |
 | TokenFactory | `0x9076A37E7b6f0874A6a0CC5061bc7312Dd2d1dF8` | |
 | NFTFactory | `0x59c7468015BDD7E0cB2cdD148bA410ea29abf2Fd` | |
